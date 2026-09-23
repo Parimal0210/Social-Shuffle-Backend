@@ -37,6 +37,11 @@ public class Registration {
     private String notes;
     private String registeredAt;
 
+    private String qrCodeToken;
+    private String qrCodeUrl;
+    private boolean emailSent = false;
+    private String emailSentAt;
+
     public Registration() {
     }
 
@@ -158,5 +163,37 @@ public class Registration {
 
     public void setRegisteredAt(String registeredAt) {
         this.registeredAt = registeredAt;
+    }
+
+    public String getQrCodeToken() {
+        return qrCodeToken;
+    }
+
+    public void setQrCodeToken(String qrCodeToken) {
+        this.qrCodeToken = qrCodeToken;
+    }
+
+    public String getQrCodeUrl() {
+        return qrCodeUrl;
+    }
+
+    public void setQrCodeUrl(String qrCodeUrl) {
+        this.qrCodeUrl = qrCodeUrl;
+    }
+
+    public boolean isEmailSent() {
+        return emailSent;
+    }
+
+    public void setEmailSent(boolean emailSent) {
+        this.emailSent = emailSent;
+    }
+
+    public String getEmailSentAt() {
+        return emailSentAt;
+    }
+
+    public void setEmailSentAt(String emailSentAt) {
+        this.emailSentAt = emailSentAt;
     }
 }

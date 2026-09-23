@@ -3,9 +3,12 @@ package com.socialshuffle.controller;
 import com.socialshuffle.model.GuestInfo;
 import com.socialshuffle.model.Participant;
 import com.socialshuffle.model.Registration;
+import com.socialshuffle.model.ShuffleEvent;
 import com.socialshuffle.repository.GameRepository;
 import com.socialshuffle.repository.ParticipantRepository;
 import com.socialshuffle.repository.RegistrationRepository;
+import com.socialshuffle.repository.ShuffleEventRepository;
+import com.socialshuffle.service.EmailNotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,13 +23,19 @@ public class RegistrationController {
     private final RegistrationRepository registrationRepository;
     private final ParticipantRepository participantRepository;
     private final GameRepository gameRepository;
+    private final ShuffleEventRepository shuffleEventRepository;
+    private final EmailNotificationService emailNotificationService;
 
     public RegistrationController(RegistrationRepository registrationRepository,
                                   ParticipantRepository participantRepository,
-                                  GameRepository gameRepository) {
+                                  GameRepository gameRepository,
+                                  ShuffleEventRepository shuffleEventRepository,
+                                  EmailNotificationService emailNotificationService) {
         this.registrationRepository = registrationRepository;
         this.participantRepository = participantRepository;
         this.gameRepository = gameRepository;
+        this.shuffleEventRepository = shuffleEventRepository;
+        this.emailNotificationService = emailNotificationService;
     }
 
     @GetMapping
@@ -63,6 +72,24 @@ public class RegistrationController {
             registration.setPaymentStatus("Pending");
         }
 
+        // Generate QR code pass
+        String qrToken = "SS-REG-" + registration.getId();
+        registration.setQrCodeToken(qrToken);
+        registration.setQrCodeUrl("https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=" + qrToken);
+
+        // Fetch event details for the quirky email
+        ShuffleEvent event = null;
+        if (registration.getEventId() != null) {
+            event = shuffleEventRepository.findById(registration.getEventId()).orElse(null);
+        }
+
+        // Send quirky confirmation email with QR code
+        boolean sent = emailNotificationService.sendRegistrationConfirmationEmail(registration, event);
+        registration.setEmailSent(sent);
+        if (sent) {
+            registration.setEmailSentAt(Instant.now().toString());
+        }
+
         Registration saved = registrationRepository.save(registration);
 
         // Update participant registration count
@@ -77,6 +104,99 @@ public class RegistrationController {
         }
 
         return ResponseEntity.ok(saved);
+    }
+
+    /**
+     * Verifies an attendee's QR code or Registration ID at the event entrance.
+     */
+    @PostMapping("/verify-qr")
+    public ResponseEntity<?> verifyQrCode(@RequestBody Map<String, String> payload) {
+        String code = payload.get("code");
+        String eventId = payload.get("eventId");
+
+        if (code == null || code.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "QR Code or Ticket Token is required."));
+        }
+
+        String cleanedCode = code.trim();
+        // Extract registration ID if prefixed with SS-REG-
+        String regId = cleanedCode.startsWith("SS-REG-") ? cleanedCode.replace("SS-REG-", "") : cleanedCode;
+
+        // Try lookup by ID first, then by QR token
+        Optional<Registration> regOpt = registrationRepository.findById(regId);
+        if (regOpt.isEmpty()) {
+            List<Registration> all = registrationRepository.findAll();
+            regOpt = all.stream()
+                    .filter(r -> cleanedCode.equalsIgnoreCase(r.getQrCodeToken()) || 
+                                 (r.getId() != null && cleanedCode.equalsIgnoreCase(r.getId())))
+                    .findFirst();
+        }
+
+        if (regOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "message", "Invalid Ticket: No registration found for code '" + cleanedCode + "'"
+            ));
+        }
+
+        Registration reg = regOpt.get();
+
+        // Check if ticket matches current event
+        if (eventId != null && !eventId.trim().isEmpty() && !eventId.equals(reg.getEventId())) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "Ticket Mismatch: This pass belongs to another event (Event ID: " + reg.getEventId() + ")",
+                    "registration", reg
+            ));
+        }
+
+        // Check if already checked in
+        if ("Checked In".equalsIgnoreCase(reg.getAttendanceStatus())) {
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "alreadyCheckedIn", true,
+                    "message", "Already Checked-In earlier at " + (reg.getCheckInTime() != null ? reg.getCheckInTime() : "entrance"),
+                    "registration", reg
+            ));
+        }
+
+        // Mark Checked In
+        reg.setAttendanceStatus("Checked In");
+        reg.setCheckInTime(Instant.now().toString());
+        Registration saved = registrationRepository.save(reg);
+
+        // Update participant statistics
+        if (reg.getParticipantId() != null) {
+            participantRepository.findById(reg.getParticipantId()).ifPresent(p -> {
+                p.setTotalEventsAttended(p.getTotalEventsAttended() + 1);
+                p.setLastAttendedEventId(reg.getEventId());
+                participantRepository.save(p);
+            });
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "alreadyCheckedIn", false,
+                "message", "Check-In Verified! Welcome " + reg.getParticipantName() + " (" + reg.getPaxCount() + " PAX)",
+                "registration", saved
+        ));
+    }
+
+    /**
+     * Preview the quirky gratitude email rendered for this registration.
+     */
+    @GetMapping("/{id}/email-preview")
+    public ResponseEntity<String> previewRegistrationEmail(@PathVariable String id) {
+        return registrationRepository.findById(id).map(reg -> {
+            ShuffleEvent event = null;
+            if (reg.getEventId() != null) {
+                event = shuffleEventRepository.findById(reg.getEventId()).orElse(null);
+            }
+            String html = emailNotificationService.generateQuirkyRegistrationEmailHtml(reg, event);
+            return ResponseEntity.ok()
+                    .header("Content-Type", "text/html; charset=UTF-8")
+                    .body(html);
+        }).orElse(ResponseEntity.notFound().build());
     }
 
     @PatchMapping("/{id}/attendance")
