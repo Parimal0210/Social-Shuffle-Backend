@@ -32,6 +32,12 @@ public class User {
 
     private String participantId;
 
+    private String authProvider = "local";
+
+    private String lastActiveAt = Instant.now().toString();
+
+    private String loginAt = Instant.now().toString();
+
     private String createdAt = Instant.now().toString();
 
     public User() {
@@ -125,6 +131,30 @@ public class User {
 
     public void setParticipantId(String participantId) {
         this.participantId = participantId;
+    }
+
+    public String getAuthProvider() {
+        return authProvider;
+    }
+
+    public void setAuthProvider(String authProvider) {
+        this.authProvider = authProvider;
+    }
+
+    public String getLastActiveAt() {
+        return lastActiveAt;
+    }
+
+    public void setLastActiveAt(String lastActiveAt) {
+        this.lastActiveAt = lastActiveAt;
+    }
+
+    public String getLoginAt() {
+        return loginAt;
+    }
+
+    public void setLoginAt(String loginAt) {
+        this.loginAt = loginAt;
     }
 
     public String getCreatedAt() {

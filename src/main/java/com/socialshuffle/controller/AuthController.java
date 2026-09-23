@@ -1,6 +1,7 @@
 package com.socialshuffle.controller;
 
 import com.socialshuffle.dto.AuthResponse;
+import com.socialshuffle.dto.GoogleLoginRequest;
 import com.socialshuffle.dto.LoginRequest;
 import com.socialshuffle.dto.RegisterRequest;
 import com.socialshuffle.model.Participant;
@@ -109,6 +110,61 @@ public class AuthController {
         String token = "jwt_" + Base64.getEncoder().encodeToString((user.getId() + ":" + user.getRole() + ":" + System.currentTimeMillis()).getBytes());
 
         return ResponseEntity.ok(new AuthResponse(token, user, participant, "Login successful"));
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<?> googleLogin(@RequestBody GoogleLoginRequest req) {
+        if (req.getEmail() == null || req.getEmail().trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Google email is required"));
+        }
+
+        String email = req.getEmail().trim().toLowerCase();
+        String name = (req.getName() != null && !req.getName().trim().isEmpty()) ? req.getName().trim() : "Pune Shuffler";
+        String area = (req.getArea() != null && !req.getArea().trim().isEmpty()) ? req.getArea().trim() : "Koregaon Park";
+        String phone = (req.getPhone() != null && !req.getPhone().trim().isEmpty()) ? req.getPhone().trim() : "+91 98220 00000";
+
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(email);
+        User user;
+        Participant participant;
+
+        if (userOpt.isPresent()) {
+            user = userOpt.get();
+            user.setLastActiveAt(java.time.Instant.now().toString());
+            user.setLoginAt(java.time.Instant.now().toString());
+            user.setAuthProvider("google");
+            if (req.getAvatar() != null && !req.getAvatar().isEmpty()) {
+                user.setAvatar(req.getAvatar());
+            }
+            userRepository.save(user);
+
+            participant = participantRepository.findByEmailIgnoreCase(email).orElse(null);
+            if (participant != null && req.getAvatar() != null) {
+                participant.setAvatar(req.getAvatar());
+                participantRepository.save(participant);
+            }
+        } else {
+            // Auto-register new participant and user via Google
+            String participantId = "p-" + UUID.randomUUID().toString().substring(0, 8);
+            String userId = "u-" + UUID.randomUUID().toString().substring(0, 8);
+
+            participant = new Participant(participantId, name, email, phone, area);
+            participant.setAvatar(req.getAvatar());
+            participant.setBio("Pune board gamer • Joined via Google Account");
+            participant.setJoinedDate(java.time.LocalDate.now().toString());
+            participantRepository.save(participant);
+
+            user = new User(userId, name, email, phone, "oauth_google", "participant", area);
+            user.setAvatar(req.getAvatar());
+            user.setBio(participant.getBio());
+            user.setParticipantId(participantId);
+            user.setAuthProvider("google");
+            user.setLoginAt(java.time.Instant.now().toString());
+            user.setLastActiveAt(java.time.Instant.now().toString());
+            userRepository.save(user);
+        }
+
+        String token = "jwt_" + Base64.getEncoder().encodeToString((user.getId() + ":" + user.getRole() + ":" + System.currentTimeMillis()).getBytes());
+        return ResponseEntity.ok(new AuthResponse(token, user, participant, "Google authentication successful"));
     }
 
     @GetMapping("/me")
