@@ -1,25 +1,29 @@
 package com.socialshuffle.repository;
 
 import com.socialshuffle.model.Participant;
-import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface ParticipantRepository extends MongoRepository<Participant, String> {
+public interface ParticipantRepository extends JpaRepository<Participant, String> {
 
     Optional<Participant> findByEmailIgnoreCase(String email);
 
     Optional<Participant> findByPhone(String phone);
 
-    @Query("{ '$or': [ { 'email': { '$regex': ?0, '$options': 'i' } }, { 'phone': ?1 } ] }")
-    Optional<Participant> findByEmailOrPhone(String email, String phone);
+    Optional<Participant> findByEmailIgnoreCaseOrPhone(String email, String phone);
 
     List<Participant> findByAreaIgnoreCase(String area);
 
-    @Query("{ '$or': [ { 'name': { '$regex': ?0, '$options': 'i' } }, { 'email': { '$regex': ?0, '$options': 'i' } }, { 'phone': { '$regex': ?0, '$options': 'i' } }, { 'area': { '$regex': ?0, '$options': 'i' } } ] }")
-    List<Participant> searchParticipants(String keyword);
+    @Query("SELECT p FROM Participant p WHERE " +
+           "LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+           "LOWER(p.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+           "p.phone LIKE CONCAT('%', :keyword, '%') OR " +
+           "LOWER(p.area) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+    List<Participant> searchParticipants(@Param("keyword") String keyword);
 }

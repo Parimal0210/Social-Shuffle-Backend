@@ -1,30 +1,55 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import com.socialshuffle.converter.StringListConverter;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Document(collection = "events")
+@Entity
+@Table(name = "events", indexes = {
+    @Index(name = "idx_event_status", columnList = "status"),
+    @Index(name = "idx_event_date", columnList = "date")
+})
 public class ShuffleEvent {
 
     @Id
+    @Column(length = 64)
     private String id;
+
     private int number;
     private String title;
+
+    @Column(length = 50)
     private String date; // YYYY-MM-DD
+
+    @Column(length = 50)
     private String time;
+
     private String venue;
+
+    @Column(columnDefinition = "TEXT")
     private String address;
+
     private String area;
     private String category;
     private int capacity;
     private double ticketPrice;
+
+    @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(columnDefinition = "TEXT")
     private String notes;
+
+    @Convert(converter = StringListConverter.class)
+    @Column(columnDefinition = "TEXT")
     private List<String> plannedGames = new ArrayList<>();
+
+    @Column(length = 50)
     private String status; // "upcoming", "active", "completed", "archived"
+
+    @Column(columnDefinition = "TEXT")
     private String coverImage;
 
     public ShuffleEvent() {

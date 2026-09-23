@@ -1,24 +1,46 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
 
-@Document(collection = "safety_reports")
+@Entity
+@Table(name = "safety_reports", indexes = {
+    @Index(name = "idx_safety_status", columnList = "status"),
+    @Index(name = "idx_safety_event", columnList = "eventId")
+})
 public class SafetyReport {
 
     @Id
+    @Column(length = 64)
     private String id;
+
+    @Column(length = 64)
     private String eventId;
+
     private String eventTitle;
+
+    @Column(length = 64)
     private String type; // Event issue, Venue issue, Community concern, Uncomfortable interaction, Harassment, Other
+
+    @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(length = 50)
     private String dateTime;
+
     private String personInvolved;
     private boolean anonymous = false;
     private String reporterName;
+
+    @Column(length = 100)
     private String reporterContact;
+
+    @Column(length = 30)
     private String status = "New"; // New, Investigating, Resolved
+
+    @Column(columnDefinition = "TEXT")
     private String resolutionNotes;
+
+    @Column(length = 50)
     private String createdAt;
 
     public SafetyReport() {

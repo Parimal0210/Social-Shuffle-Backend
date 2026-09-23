@@ -1,10 +1,12 @@
 package com.socialshuffle.controller;
 
 import com.socialshuffle.repository.*;
-import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -13,7 +15,7 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class SystemHealthController {
 
-    private final MongoTemplate mongoTemplate;
+    private final DataSource dataSource;
     private final ShuffleEventRepository eventRepository;
     private final GameRepository gameRepository;
     private final ParticipantRepository participantRepository;
@@ -22,7 +24,7 @@ public class SystemHealthController {
     private final SafetyReportRepository safetyReportRepository;
     private final VolunteerApplicationRepository volunteerRepository;
 
-    public SystemHealthController(MongoTemplate mongoTemplate,
+    public SystemHealthController(DataSource dataSource,
                                   ShuffleEventRepository eventRepository,
                                   GameRepository gameRepository,
                                   ParticipantRepository participantRepository,
@@ -30,7 +32,7 @@ public class SystemHealthController {
                                   EventFeedbackRepository feedbackRepository,
                                   SafetyReportRepository safetyReportRepository,
                                   VolunteerApplicationRepository volunteerRepository) {
-        this.mongoTemplate = mongoTemplate;
+        this.dataSource = dataSource;
         this.eventRepository = eventRepository;
         this.gameRepository = gameRepository;
         this.participantRepository = participantRepository;
@@ -46,9 +48,18 @@ public class SystemHealthController {
         health.put("status", "UP");
         health.put("service", "Social Shuffle Spring Boot REST API");
         health.put("version", "1.0.0");
-        health.put("database", "MongoDB");
-        health.put("databaseName", mongoTemplate.getDb().getName());
-        health.put("timestamp", java.time.Instant.now().toString());
+        health.put("database", "MySQL");
+
+        try (Connection conn = dataSource.getConnection()) {
+            health.put("databaseProduct", conn.getMetaData().getDatabaseProductName());
+            health.put("databaseVersion", conn.getMetaData().getDatabaseProductVersion());
+            health.put("databaseCatalog", conn.getCatalog());
+            health.put("databaseUrl", conn.getMetaData().getURL());
+        } catch (Exception e) {
+            health.put("databaseStatus", "Checking connection: " + e.getMessage());
+        }
+
+        health.put("timestamp", Instant.now().toString());
 
         Map<String, Object> counts = new HashMap<>();
         counts.put("events", eventRepository.count());

@@ -48,7 +48,7 @@ public class AuthController {
         String participantId = "p-" + UUID.randomUUID().toString().substring(0, 8);
         String userId = "u-" + UUID.randomUUID().toString().substring(0, 8);
 
-        // Create participant profile in MongoDB
+        // Create participant profile in MySQL
         Participant participant = new Participant(participantId, req.getName().trim(), email, phone, req.getArea() != null ? req.getArea().trim() : "Pune");
         participant.setBio(req.getBio());
         participant.setAvatar(req.getAvatar());

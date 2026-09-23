@@ -1,24 +1,28 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
+import com.socialshuffle.converter.GuestListConverter;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Document(collection = "registrations")
-@CompoundIndex(def = "{'eventId': 1, 'participantId': 1}")
+@Entity
+@Table(name = "registrations", indexes = {
+    @Index(name = "idx_reg_event", columnList = "eventId"),
+    @Index(name = "idx_reg_participant", columnList = "participantId"),
+    @Index(name = "idx_reg_event_part", columnList = "eventId, participantId"),
+    @Index(name = "idx_reg_attendance", columnList = "attendanceStatus")
+})
 public class Registration {
 
     @Id
+    @Column(length = 64)
     private String id;
 
-    @Indexed
+    @Column(nullable = false, length = 64)
     private String eventId;
 
-    @Indexed
+    @Column(nullable = false, length = 64)
     private String participantId;
 
     private String participantName;
@@ -27,20 +31,22 @@ public class Registration {
     private String participantArea;
 
     private int paxCount = 1;
+
+    @Convert(converter = GuestListConverter.class)
+    @Column(columnDefinition = "TEXT")
     private List<GuestInfo> guests = new ArrayList<>();
 
+    @Column(length = 30)
     private String paymentStatus = "Pending"; // Confirmed, Pending, Waived
+
+    @Column(length = 30)
     private String attendanceStatus = "Pending"; // Checked In, Pending, Cancelled, No Show
+
+    @Column(length = 50)
     private String checkInTime;
 
-    private List<String> gamesPlayed = new ArrayList<>();
-    private String notes;
+    @Column(length = 50)
     private String registeredAt;
-
-    private String qrCodeToken;
-    private String qrCodeUrl;
-    private boolean emailSent = false;
-    private String emailSentAt;
 
     public Registration() {
     }
@@ -141,59 +147,11 @@ public class Registration {
         this.checkInTime = checkInTime;
     }
 
-    public List<String> getGamesPlayed() {
-        return gamesPlayed;
-    }
-
-    public void setGamesPlayed(List<String> gamesPlayed) {
-        this.gamesPlayed = gamesPlayed != null ? gamesPlayed : new ArrayList<>();
-    }
-
-    public String getNotes() {
-        return notes;
-    }
-
-    public void setNotes(String notes) {
-        this.notes = notes;
-    }
-
     public String getRegisteredAt() {
         return registeredAt;
     }
 
     public void setRegisteredAt(String registeredAt) {
         this.registeredAt = registeredAt;
-    }
-
-    public String getQrCodeToken() {
-        return qrCodeToken;
-    }
-
-    public void setQrCodeToken(String qrCodeToken) {
-        this.qrCodeToken = qrCodeToken;
-    }
-
-    public String getQrCodeUrl() {
-        return qrCodeUrl;
-    }
-
-    public void setQrCodeUrl(String qrCodeUrl) {
-        this.qrCodeUrl = qrCodeUrl;
-    }
-
-    public boolean isEmailSent() {
-        return emailSent;
-    }
-
-    public void setEmailSent(boolean emailSent) {
-        this.emailSent = emailSent;
-    }
-
-    public String getEmailSentAt() {
-        return emailSentAt;
-    }
-
-    public void setEmailSentAt(String emailSentAt) {
-        this.emailSentAt = emailSentAt;
     }
 }

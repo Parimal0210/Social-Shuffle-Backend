@@ -1,36 +1,58 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
+import com.socialshuffle.converter.StringListConverter;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Document(collection = "participants")
+@Entity
+@Table(name = "participants", indexes = {
+    @Index(name = "idx_participant_email", columnList = "email"),
+    @Index(name = "idx_participant_phone", columnList = "phone"),
+    @Index(name = "idx_participant_area", columnList = "area")
+})
 public class Participant {
 
     @Id
+    @Column(length = 64)
     private String id;
 
     private String name;
 
-    @Indexed(unique = true)
+    @Column(unique = true, nullable = false, length = 150)
     private String email;
 
-    @Indexed
+    @Column(length = 50)
     private String phone;
 
     private String area;
+
+    @Column(columnDefinition = "TEXT")
     private String avatar;
+
+    @Column(columnDefinition = "TEXT")
     private String bio;
+
+    @Column(length = 50)
     private String joinedDate;
+
     private int totalEventsAttended;
     private int totalRegistrations;
+
+    @Convert(converter = StringListConverter.class)
+    @Column(columnDefinition = "TEXT")
     private List<String> gamesPlayedIds = new ArrayList<>();
+
+    @Convert(converter = StringListConverter.class)
+    @Column(columnDefinition = "TEXT")
     private List<String> venuesVisited = new ArrayList<>();
+
     private int totalPaxBrought;
+
+    @Column(length = 64)
     private String lastAttendedEventId;
+
     private String lastAttendedEventTitle;
 
     public Participant() {

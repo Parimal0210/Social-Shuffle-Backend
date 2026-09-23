@@ -1,18 +1,28 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
 
-@Document(collection = "audit_logs")
+@Entity
+@Table(name = "audit_logs", indexes = {
+    @Index(name = "idx_audit_timestamp", columnList = "timestamp")
+})
 public class AuditLog {
 
     @Id
+    @Column(length = 64)
     private String id;
+
     private String adminName;
     private String action;
     private String target;
+
+    @Column(columnDefinition = "TEXT")
     private String details;
+
+    @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(length = 50)
     private String timestamp;
 
     public AuditLog() {

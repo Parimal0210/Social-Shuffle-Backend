@@ -1,17 +1,30 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
 
-@Document(collection = "notifications")
+@Entity
+@Table(name = "notifications", indexes = {
+    @Index(name = "idx_notif_timestamp", columnList = "timestamp"),
+    @Index(name = "idx_notif_read", columnList = "isRead")
+})
 public class NotificationItem {
 
     @Id
+    @Column(length = 64)
     private String id;
+
     private String title;
+
+    @Column(columnDefinition = "TEXT")
     private String message;
+
+    @Column(length = 50)
     private String type; // event, registration, community, system
+
+    @Column(length = 50)
     private String timestamp;
+
+    @Column(name = "is_read")
     private boolean read = false;
 
     public NotificationItem() {

@@ -1,23 +1,39 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
 
-@Document(collection = "feedback")
+@Entity
+@Table(name = "event_feedback", indexes = {
+    @Index(name = "idx_feedback_event", columnList = "eventId"),
+    @Index(name = "idx_feedback_participant", columnList = "participantId")
+})
 public class EventFeedback {
 
     @Id
+    @Column(length = 64)
     private String id;
+
+    @Column(nullable = false, length = 64)
     private String eventId;
+
     private String eventTitle;
+
+    @Column(length = 64)
     private String participantId;
+
     private String participantName;
+
     private boolean anonymous = false;
+
     private int overallRating; // 1-5
     private int venueRating;
     private int gameRating;
     private int hostRating;
+
+    @Column(columnDefinition = "TEXT")
     private String suggestions;
+
+    @Column(length = 50)
     private String createdAt;
 
     public EventFeedback() {

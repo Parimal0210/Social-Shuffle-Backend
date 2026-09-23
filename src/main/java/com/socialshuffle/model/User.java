@@ -1,43 +1,50 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
-
+import jakarta.persistence.*;
 import java.time.Instant;
 
-@Document(collection = "users")
+@Entity
+@Table(name = "users")
 public class User {
 
     @Id
+    @Column(length = 64)
     private String id;
 
     private String name;
 
-    @Indexed(unique = true)
+    @Column(unique = true, nullable = false, length = 150)
     private String email;
 
-    @Indexed
+    @Column(length = 50)
     private String phone;
 
     private String password;
 
+    @Column(length = 30)
     private String role; // "participant" or "admin"
 
     private String area;
 
+    @Column(columnDefinition = "TEXT")
     private String avatar;
 
+    @Column(columnDefinition = "TEXT")
     private String bio;
 
+    @Column(length = 64)
     private String participantId;
 
+    @Column(length = 30)
     private String authProvider = "local";
 
+    @Column(length = 50)
     private String lastActiveAt = Instant.now().toString();
 
+    @Column(length = 50)
     private String loginAt = Instant.now().toString();
 
+    @Column(length = 50)
     private String createdAt = Instant.now().toString();
 
     public User() {

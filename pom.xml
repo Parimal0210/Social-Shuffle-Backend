@@ -15,7 +15,7 @@
     <artifactId>social-shuffle-backend</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <name>Social Shuffle Backend</name>
-    <description>Spring Boot 4 and MongoDB REST API for Social Shuffle Pune Board Game Community</description>
+    <description>Spring Boot REST API with MySQL Persistence for Social Shuffle Pune (GoDaddy / Cloud / Local)</description>
     
     <properties>
         <java.version>17</java.version>
@@ -30,10 +30,17 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
         
-        <!-- Spring Data MongoDB for Document Database Persistence -->
+        <!-- Spring Data JPA for Relational ORM / MySQL Persistence -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        
+        <!-- MySQL Connector / J for GoDaddy cPanel MySQL & Local MySQL -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
         </dependency>
         
         <!-- Validation Starter for Request Body Validation -->

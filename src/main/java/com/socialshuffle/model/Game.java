@@ -1,26 +1,42 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import com.socialshuffle.converter.StringListConverter;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Document(collection = "games")
+@Entity
+@Table(name = "games", indexes = {
+    @Index(name = "idx_game_category", columnList = "category"),
+    @Index(name = "idx_game_difficulty", columnList = "difficulty"),
+    @Index(name = "idx_game_active", columnList = "active")
+})
 public class Game {
 
     @Id
+    @Column(length = 64)
     private String id;
+
     private String name;
     private String category;
     private String difficulty;
     private String players;
     private String duration;
+
+    @Column(columnDefinition = "TEXT")
     private String description;
+
     private boolean active = true;
     private int playsCount = 0;
+
+    @Convert(converter = StringListConverter.class)
+    @Column(columnDefinition = "TEXT")
     private List<String> tags = new ArrayList<>();
+
     private Double rating;
+
+    @Column(columnDefinition = "TEXT")
     private String image;
 
     public Game() {

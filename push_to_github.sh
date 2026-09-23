@@ -8,6 +8,7 @@ GITHUB_USER="Parimal0210"
 
 echo "=========================================================="
 echo "  Social Shuffle Pune — Push Backend to GitHub ($REPO_NAME)"
+echo "  MySQL / JPA Edition (GoDaddy cPanel Ready)"
 echo "=========================================================="
 
 PAT="${1:-$GITHUB_TOKEN}"
@@ -21,6 +22,15 @@ if [ -z "$PAT" ]; then
   exit 1
 fi
 
+if [ ! -d ".git" ]; then
+  git init -b main
+  git config user.name "Parimal Shete"
+  git config user.email "parimalmshete@gmail.com"
+fi
+
+git add -A
+git commit -m "Migrate backend database to MySQL for GoDaddy hosting and STS" || true
+
 echo "1. Configuring authenticated remote..."
 git remote remove origin 2>/dev/null || true
 git remote add origin "https://${GITHUB_USER}:${PAT}@github.com/${GITHUB_USER}/${REPO_NAME}.git"
@@ -29,4 +39,4 @@ echo "2. Pushing main branch to $REPO_URL..."
 git push -u origin main --force
 
 echo ""
-echo "✅ Successfully pushed to $REPO_URL!"
+echo "✅ Successfully pushed MySQL backend to $REPO_URL!"

@@ -1,27 +1,55 @@
 package com.socialshuffle.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import com.socialshuffle.converter.StringListConverter;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Document(collection = "volunteers")
+@Entity
+@Table(name = "volunteer_applications", indexes = {
+    @Index(name = "idx_vol_status", columnList = "status"),
+    @Index(name = "idx_vol_email", columnList = "email")
+})
 public class VolunteerApplication {
 
     @Id
+    @Column(length = 64)
     private String id;
+
     private String name;
+
+    @Column(length = 150)
     private String email;
+
+    @Column(length = 50)
     private String phone;
+
     private String area;
+
+    @Column(columnDefinition = "TEXT")
     private String reason;
+
+    @Column(columnDefinition = "TEXT")
     private String experience;
+
+    @Column(columnDefinition = "TEXT")
     private String skills;
+
+    @Column(columnDefinition = "TEXT")
     private String availability;
+
+    @Convert(converter = StringListConverter.class)
+    @Column(columnDefinition = "TEXT")
     private List<String> preferredResponsibilities = new ArrayList<>();
+
+    @Column(columnDefinition = "TEXT")
     private String additionalInfo;
+
+    @Column(length = 30)
     private String status = "New"; // New, Under Review, Accepted, Rejected, On Hold
+
+    @Column(length = 50)
     private String submittedAt;
 
     public VolunteerApplication() {

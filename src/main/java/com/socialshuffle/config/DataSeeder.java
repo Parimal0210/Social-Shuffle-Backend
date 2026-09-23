@@ -9,7 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Automatically seeds initial Pune board game data into MongoDB if collections are empty.
+ * Automatically seeds initial Pune board game data into MySQL if tables are empty.
  */
 @Component
 public class DataSeeder implements CommandLineRunner {
@@ -100,7 +100,7 @@ public class DataSeeder implements CommandLineRunner {
             e2.setPlannedGames(Arrays.asList("g-catan", "g-splendor", "g-7wonders"));
 
             eventRepository.saveAll(Arrays.asList(e1, e2));
-            System.out.println("✅ Seeded initial events into MongoDB");
+            System.out.println("✅ Seeded initial events into MySQL");
         }
     }
 
@@ -151,7 +151,7 @@ public class DataSeeder implements CommandLineRunner {
             g4.setPlaysCount(35);
 
             gameRepository.saveAll(Arrays.asList(g1, g2, g3, g4));
-            System.out.println("✅ Seeded initial games into MongoDB");
+            System.out.println("✅ Seeded initial games into MySQL");
         }
     }
 
@@ -172,7 +172,7 @@ public class DataSeeder implements CommandLineRunner {
             p2.setTotalPaxBrought(2);
 
             participantRepository.saveAll(Arrays.asList(p1, p2));
-            System.out.println("✅ Seeded initial participants into MongoDB");
+            System.out.println("✅ Seeded initial participants into MySQL");
         }
     }
 
@@ -193,13 +193,13 @@ public class DataSeeder implements CommandLineRunner {
             r1.setRegisteredAt("2026-09-20T10:30:00Z");
 
             registrationRepository.save(r1);
-            System.out.println("✅ Seeded initial registrations into MongoDB");
+            System.out.println("✅ Seeded initial registrations into MySQL");
         }
     }
 
     private void seedAuditAndNotifications() {
         if (auditLogRepository.count() == 0) {
-            AuditLog log = new AuditLog("log-1", "Aman Joshi (Host)", "SYSTEM_INIT", "Database", "Initialized MongoDB schemas and seeded Pune community records", "2026-09-22T10:00:00Z");
+            AuditLog log = new AuditLog("log-1", "Aman Joshi (Host)", "SYSTEM_INIT", "Database", "Initialized MySQL schema and seeded Pune community records", "2026-09-22T10:00:00Z");
             auditLogRepository.save(log);
         }
 
