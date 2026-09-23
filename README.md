@@ -59,7 +59,9 @@ Complete production-grade Spring Boot 3.x REST API with Spring Data MongoDB for 
 | `GET` | `/api/participants/check-duplicate` | Check duplicate by email/phone |
 | `POST` | `/api/participants/merge` | Merge duplicate participant profiles |
 | `GET` | `/api/registrations` | List registrations (`?eventId=...`) |
-| `POST` | `/api/registrations` | Book spot / RSVP for meetup |
+| `POST` | `/api/registrations` | Book spot / RSVP for meetup (generates QR pass & triggers email) |
+| `POST` | `/api/registrations/verify-qr` | Verify & check-in attendee pass by QR token or reg ID |
+| `GET`  | `/api/registrations/{id}/email-preview` | Preview rendered HTML confirmation email |
 | `PATCH` | `/api/registrations/{id}/attendance` | Check-in participant (`?status=Checked In`) |
 | `PATCH` | `/api/registrations/{id}/payment` | Update payment (`?status=Confirmed`) |
 | `POST` | `/api/registrations/{id}/toggle-game`| Mark game played during meetup |
