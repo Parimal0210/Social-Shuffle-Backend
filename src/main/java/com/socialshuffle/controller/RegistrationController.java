@@ -50,6 +50,27 @@ public class RegistrationController {
         return registrationRepository.findAll();
     }
 
+    @DeleteMapping("/revert-priya-35")
+    public ResponseEntity<?> revertPriyaNairEvent35() {
+        List<Registration> regs = registrationRepository.findAll();
+        List<Registration> toDelete = new ArrayList<>();
+        for (Registration r : regs) {
+            boolean isPriya = (r.getParticipantName() != null && r.getParticipantName().toLowerCase().contains("priya nair")) ||
+                              (r.getParticipantEmail() != null && r.getParticipantEmail().toLowerCase().contains("priya.nair")) ||
+                              "p-priya".equalsIgnoreCase(r.getParticipantId());
+            boolean isEvent35 = r.getEventId() != null && (r.getEventId().contains("35") || r.getEventId().equalsIgnoreCase("ev-35") || r.getEventId().equalsIgnoreCase("evt-35"));
+            if (isPriya && isEvent35) {
+                toDelete.add(r);
+            }
+        }
+        registrationRepository.deleteAll(toDelete);
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "message", "Reverted Priya Nair registration for Event #35.",
+            "revertedCount", toDelete.size()
+        ));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<Registration> getRegistrationById(@PathVariable String id) {
         return registrationRepository.findById(id)
