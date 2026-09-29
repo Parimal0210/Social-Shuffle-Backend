@@ -38,6 +38,13 @@ buildNumber.properties
 # IDE specific
 .idea/
 *.iml
+.vscode/
+
+# Tokens and Credentials
+.github_token
+*.token
+*.key
+credentials.json
 .project
 .classpath
 .settings/
