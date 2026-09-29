@@ -2,6 +2,7 @@ package com.socialshuffle.config;
 
 import com.socialshuffle.model.*;
 import com.socialshuffle.repository.*;
+import com.socialshuffle.security.PasswordSecurityUtil;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,8 @@ public class DataSeeder implements CommandLineRunner {
     private final AuditLogRepository auditLogRepository;
     private final NotificationItemRepository notificationRepository;
     private final UserRepository userRepository;
+    private final AdminRepository adminRepository;
+    private final PasswordSecurityUtil passwordSecurityUtil;
 
     public DataSeeder(ShuffleEventRepository eventRepository,
                       GameRepository gameRepository,
@@ -28,7 +31,9 @@ public class DataSeeder implements CommandLineRunner {
                       RegistrationRepository registrationRepository,
                       AuditLogRepository auditLogRepository,
                       NotificationItemRepository notificationRepository,
-                      UserRepository userRepository) {
+                      UserRepository userRepository,
+                      AdminRepository adminRepository,
+                      PasswordSecurityUtil passwordSecurityUtil) {
         this.eventRepository = eventRepository;
         this.gameRepository = gameRepository;
         this.participantRepository = participantRepository;
@@ -36,10 +41,13 @@ public class DataSeeder implements CommandLineRunner {
         this.auditLogRepository = auditLogRepository;
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
+        this.adminRepository = adminRepository;
+        this.passwordSecurityUtil = passwordSecurityUtil;
     }
 
     @Override
     public void run(String... args) {
+        seedAdmins();
         seedUsers();
         seedEvents();
         seedGames();
@@ -48,17 +56,37 @@ public class DataSeeder implements CommandLineRunner {
         seedAuditAndNotifications();
     }
 
+    private void seedAdmins() {
+        if (adminRepository.count() == 0) {
+            AdminAccount admin = new AdminAccount(
+                    "u-admin",
+                    "Aman Joshi (Host)",
+                    "admin@socialshuffle.com",
+                    "+91 98220 11223",
+                    passwordSecurityUtil.hashPassword("admin123"),
+                    "Community Lead & Founder",
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"
+            );
+            admin.setBio("Social Shuffle Founder & Super Admin. Refers to database table for name and admin details.");
+            adminRepository.save(admin);
+        }
+    }
+
     private void seedUsers() {
         if (userRepository.count() == 0) {
-            User admin = new User("u-admin", "Aman Joshi", "admin@socialshuffle.com", "+91 98220 11223", "admin123", "admin", "Pune");
+            String adminHash = passwordSecurityUtil.hashPassword("admin123");
+            User admin = new User("u-admin", "Aman Joshi (Host)", "admin@socialshuffle.com", "+91 98220 11223", adminHash, "admin", "Pune");
+            admin.setBio("Community Lead & Founder");
             userRepository.save(admin);
 
-            User p1 = new User("u-rohan", "Rohan Kulkarni", "rohan.kulkarni@example.com", "+91 98220 12345", "shuffler123", "participant", "Koregaon Park");
+            String userHash = passwordSecurityUtil.hashPassword("shuffler123");
+
+            User p1 = new User("u-rohan", "Rohan Kulkarni", "rohan.kulkarni@example.com", "+91 98220 12345", userHash, "participant", "Koregaon Park");
             p1.setParticipantId("p-rahul");
             p1.setBio("Board game lover, strategy nerd, Catan enthusiast.");
             userRepository.save(p1);
 
-            User p2 = new User("u-ananya", "Ananya Deshmukh", "ananya.d@example.com", "+91 97654 32100", "shuffler123", "participant", "Baner");
+            User p2 = new User("u-ananya", "Ananya Deshmukh", "ananya.d@example.com", "+91 97654 32100", userHash, "participant", "Baner");
             p2.setParticipantId("p-ananya");
             p2.setBio("Casual gamer & Azul fan. Love meeting new people in Pune!");
             userRepository.save(p2);
@@ -88,124 +116,99 @@ public class DataSeeder implements CommandLineRunner {
             e2.setNumber(36);
             e2.setTitle("Social Shuffle #36: Baner Strategic Showdown");
             e2.setDate("2026-10-04");
-            e2.setTime("Sunday, 4:30 PM – 8:30 PM");
-            e2.setVenue("Pagdandi Bookstore Cafe");
-            e2.setAddress("Regent Plaza, Baner Pashan Link Rd, Pune");
+            e2.setTime("Sunday, 3:30 PM – 7:30 PM");
+            e2.setVenue("One Restaurant & Bar");
+            e2.setAddress("Balewadi High St, Baner, Pune");
             e2.setArea("Baner");
-            e2.setCategory("Tournament");
+            e2.setCategory("Strategy Special");
             e2.setCapacity(32);
             e2.setTicketPrice(400);
-            e2.setDescription("A tactical showdown featuring Catan, 7 Wonders, and Wingspan with special prizes and handcrafted coffee.");
+            e2.setDescription("Dedicated tables for mid-weight to heavy eurogames. Terraforming Mars, Dune Imperium, and Wingspan tables with game masters.");
             e2.setStatus("upcoming");
-            e2.setPlannedGames(Arrays.asList("g-catan", "g-splendor", "g-7wonders"));
+            e2.setPlannedGames(Arrays.asList("g-terraforming", "g-wingspan", "g-dune", "g-root"));
 
-            eventRepository.saveAll(Arrays.asList(e1, e2));
-            System.out.println("✅ Seeded initial events into MySQL");
+            ShuffleEvent e3 = new ShuffleEvent();
+            e3.setId("evt-34");
+            e3.setNumber(34);
+            e3.setTitle("Social Shuffle #34: Social Deduction Night");
+            e3.setDate("2026-09-20");
+            e3.setTime("Sunday, 4:00 PM – 8:00 PM");
+            e3.setVenue("FC Road Social");
+            e3.setAddress("FC Road, Deccan Gymkhana, Pune");
+            e3.setArea("FC Road / Deccan");
+            e3.setCategory("Party & Deduction");
+            e3.setCapacity(45);
+            e3.setTicketPrice(350);
+            e3.setDescription("Blood on the Clocktower, Secret Hitler, and Avalon games with 42 attendees.");
+            e3.setStatus("completed");
+            e3.setPlannedGames(Arrays.asList("g-botc", "g-secrethitler", "g-avalon", "g-deception"));
+
+            eventRepository.saveAll(Arrays.asList(e1, e2, e3));
         }
     }
 
     private void seedGames() {
         if (gameRepository.count() == 0) {
-            Game g1 = new Game();
-            g1.setId("g-catan");
-            g1.setName("Catan (Settlers of Catan)");
-            g1.setCategory("Strategy");
-            g1.setDifficulty("Medium");
-            g1.setPlayers("3-4 Players");
-            g1.setDuration("60-90 mins");
-            g1.setDescription("Collect resources, trade with fellow shufflers, build settlements and roads on the island of Catan.");
-            g1.setActive(true);
-            g1.setPlaysCount(48);
+            BoardGame g1 = new BoardGame("g-catan", "Catan", "Strategy", "3-4", "60-90 min", "Medium", "Aman Joshi", true, "Lane 6 Cafe", "The iconic resource trading game that started modern board gaming.");
+            BoardGame g2 = new BoardGame("g-avalon", "The Resistance: Avalon", "Social Deduction", "5-10", "30-45 min", "Easy", "Community Box", true, "Lane 6 Cafe", "Test loyalties, discover minions of Mordred, and embark on quests.");
+            BoardGame g3 = new BoardGame("g-ticket", "Ticket to Ride: Europe", "Family Strategy", "2-5", "45-60 min", "Easy", "Parimal Shete", true, "FC Road Cafe", "Build train routes connecting iconic European cities.");
+            BoardGame g4 = new BoardGame("g-codenames", "Codenames", "Party / Word", "4-8+", "15-20 min", "Easy", "Community Box", true, "Lane 6 Cafe", "Two rival spymasters know the secret identities of 25 agents.");
+            BoardGame g5 = new BoardGame("g-splendor", "Splendor", "Engine Building", "2-4", "30 min", "Easy", "Rohan Kulkarni", true, "Baner Venue", "Renaissance merchants collecting gem tokens to acquire cards and nobles.");
+            BoardGame g6 = new BoardGame("g-wingspan", "Wingspan", "Engine Building", "1-5", "40-70 min", "Medium", "Aman Joshi", true, "Baner Venue", "Attract beautiful birds to your wildlife preserve.");
 
-            Game g2 = new Game();
-            g2.setId("g-avalon");
-            g2.setName("The Resistance: Avalon");
-            g2.setCategory("Social Deduction");
-            g2.setDifficulty("Beginner");
-            g2.setPlayers("5-10 Players");
-            g2.setDuration("30-45 mins");
-            g2.setDescription("Loyal servants of Arthur vs Minions of Mordred. Pure deception, table talk, and dramatic accusations.");
-            g2.setActive(true);
-            g2.setPlaysCount(62);
-
-            Game g3 = new Game();
-            g3.setId("g-codenames");
-            g3.setName("Codenames");
-            g3.setCategory("Party");
-            g3.setDifficulty("Beginner");
-            g3.setPlayers("4-8 Players");
-            g3.setDuration("15-20 mins");
-            g3.setDescription("Two rival spymasters know the secret identities of 25 agents. Teammates try to guess words based on one-word clues.");
-            g3.setActive(true);
-            g3.setPlaysCount(89);
-
-            Game g4 = new Game();
-            g4.setId("g-splendor");
-            g4.setName("Splendor");
-            g4.setCategory("Strategy");
-            g4.setDifficulty("Beginner");
-            g4.setPlayers("2-4 Players");
-            g4.setDuration("30 mins");
-            g4.setDescription("Renaissance merchants acquiring gemstone mines, transportation, and shops to attract aristocratic patrons.");
-            g4.setActive(true);
-            g4.setPlaysCount(35);
-
-            gameRepository.saveAll(Arrays.asList(g1, g2, g3, g4));
-            System.out.println("✅ Seeded initial games into MySQL");
+            gameRepository.saveAll(Arrays.asList(g1, g2, g3, g4, g5, g6));
         }
     }
 
     private void seedParticipants() {
         if (participantRepository.count() == 0) {
-            Participant p1 = new Participant("p-rohan", "Rohan Kulkarni", "rohan.kulkarni@example.com", "9822012345", "Koregaon Park");
+            Participant p1 = new Participant("p-rahul", "Rohan Kulkarni", "rohan.kulkarni@example.com", "+91 98220 12345", "Koregaon Park");
+            p1.setBio("Board game lover, strategy nerd, Catan enthusiast.");
             p1.setTotalEventsAttended(8);
             p1.setTotalRegistrations(9);
-            p1.setGamesPlayedIds(Arrays.asList("g-catan", "g-avalon", "g-codenames"));
-            p1.setVenuesVisited(Arrays.asList("The Rustle Nest Cafe", "Pagdandi Bookstore Cafe"));
-            p1.setTotalPaxBrought(4);
+            p1.setJoinedDate("2026-03-12");
 
-            Participant p2 = new Participant("p-ananya", "Ananya Deshmukh", "ananya.d@example.com", "9823056789", "Baner");
+            Participant p2 = new Participant("p-ananya", "Ananya Deshmukh", "ananya.d@example.com", "+91 97654 32100", "Baner");
+            p2.setBio("Casual gamer & Azul fan. Love meeting new people in Pune!");
             p2.setTotalEventsAttended(5);
-            p2.setTotalRegistrations(5);
-            p2.setGamesPlayedIds(Arrays.asList("g-codenames", "g-splendor"));
-            p2.setVenuesVisited(Arrays.asList("Pagdandi Bookstore Cafe"));
-            p2.setTotalPaxBrought(2);
+            p2.setTotalRegistrations(6);
+            p2.setJoinedDate("2026-04-05");
 
-            participantRepository.saveAll(Arrays.asList(p1, p2));
-            System.out.println("✅ Seeded initial participants into MySQL");
+            Participant p3 = new Participant("p-sid", "Siddharth Mehta", "siddharth.m@example.com", "+91 98901 23456", "Viman Nagar");
+            p3.setBio("Heavy eurogame enthusiast. Ark Nova and Terraforming Mars!");
+            p3.setTotalEventsAttended(12);
+            p3.setTotalRegistrations(13);
+            p3.setJoinedDate("2026-01-20");
+
+            participantRepository.saveAll(Arrays.asList(p1, p2, p3));
         }
     }
 
     private void seedRegistrations() {
         if (registrationRepository.count() == 0) {
-            Registration r1 = new Registration();
-            r1.setId("reg-1");
-            r1.setEventId("evt-35");
-            r1.setParticipantId("p-rohan");
-            r1.setParticipantName("Rohan Kulkarni");
-            r1.setParticipantEmail("rohan.kulkarni@example.com");
-            r1.setParticipantPhone("9822012345");
-            r1.setParticipantArea("Koregaon Park");
-            r1.setPaxCount(2);
-            r1.setGuests(Arrays.asList(new GuestInfo("g-1", "Tanvi Joshi")));
-            r1.setPaymentStatus("Confirmed");
-            r1.setAttendanceStatus("Pending");
-            r1.setRegisteredAt("2026-09-20T10:30:00Z");
+            EventRegistration r1 = new EventRegistration("r-101", "evt-35", "p-rahul", "Rohan Kulkarni", "rohan.kulkarni@example.com", "+91 98220 12345", 1, "Paid", "UPI", 350, "Registered", "2026-09-22 14:30");
+            r1.setTicketCode("SHUFFLE-35-RK01");
 
-            registrationRepository.save(r1);
-            System.out.println("✅ Seeded initial registrations into MySQL");
+            EventRegistration r2 = new EventRegistration("r-102", "evt-35", "p-ananya", "Ananya Deshmukh", "ananya.d@example.com", "+91 97654 32100", 2, "Paid", "Razorpay", 700, "Registered", "2026-09-23 11:15");
+            r2.setTicketCode("SHUFFLE-35-AD02");
+
+            EventRegistration r3 = new EventRegistration("r-103", "evt-34", "p-sid", "Siddharth Mehta", "siddharth.m@example.com", "+91 98901 23456", 1, "Paid", "UPI", 350, "Checked In", "2026-09-18 19:40");
+            r3.setTicketCode("SHUFFLE-34-SM01");
+
+            registrationRepository.saveAll(Arrays.asList(r1, r2, r3));
         }
     }
 
     private void seedAuditAndNotifications() {
         if (auditLogRepository.count() == 0) {
-            AuditLog log = new AuditLog("log-1", "Aman Joshi (Host)", "SYSTEM_INIT", "Database", "Initialized MySQL schema and seeded Pune community records", "2026-09-22T10:00:00Z");
-            auditLogRepository.save(log);
+            AuditLog log1 = new AuditLog("audit-1", "Aman Joshi (Host)", "Publish Meetup", "Event #35 created and published", "2026-09-20 10:00");
+            AuditLog log2 = new AuditLog("audit-2", "Aman Joshi (Host)", "Security Audit", "Enabled PBKDF2 password hashing & rate limiting defense", "2026-09-25 12:00");
+            auditLogRepository.saveAll(Arrays.asList(log1, log2));
         }
 
         if (notificationRepository.count() == 0) {
-            NotificationItem notif = new NotificationItem("notif-1", "Social Shuffle #35 Live", "Meetup announced for Koregaon Park. Registrations are open!", "event", "2026-09-22T10:00:00Z", false);
-            notificationRepository.save(notif);
+            NotificationItem n1 = new NotificationItem("notif-1", "Registration Confirmed", "You are confirmed for Social Shuffle #35 this Sunday!", "2026-09-23 11:16", false, "r-102");
+            notificationRepository.save(n1);
         }
     }
 }
