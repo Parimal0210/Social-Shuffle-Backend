@@ -48,6 +48,14 @@ public class Registration {
     @Column(length = 50)
     private String registeredAt;
 
+    @Column(length = 64)
+    private String razorpayPaymentId;
+
+    @Column(length = 64)
+    private String razorpayOrderId;
+
+    private Double amountPaid;
+
     public Registration() {
     }
 
@@ -153,5 +161,29 @@ public class Registration {
 
     public void setRegisteredAt(String registeredAt) {
         this.registeredAt = registeredAt;
+    }
+
+    public String getRazorpayPaymentId() {
+        return razorpayPaymentId;
+    }
+
+    public void setRazorpayPaymentId(String razorpayPaymentId) {
+        this.razorpayPaymentId = razorpayPaymentId;
+    }
+
+    public String getRazorpayOrderId() {
+        return razorpayOrderId;
+    }
+
+    public void setRazorpayOrderId(String razorpayOrderId) {
+        this.razorpayOrderId = razorpayOrderId;
+    }
+
+    public Double getAmountPaid() {
+        return amountPaid;
+    }
+
+    public void setAmountPaid(Double amountPaid) {
+        this.amountPaid = amountPaid;
     }
 }

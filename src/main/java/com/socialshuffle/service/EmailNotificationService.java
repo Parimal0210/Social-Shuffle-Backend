@@ -89,7 +89,7 @@ public class EmailNotificationService {
                 "        <div class='field'><span class='label'>Where:</span><span class='val'>" + eventVenue + " (" + eventAddress + ")</span></div>" +
                 "        <div class='field'><span class='label'>Seats Reserved (PAX):</span><span class='val'>" + pax + " Shuffler(s)</span></div>" +
                 guestListHtml +
-                "        <div class='field'><span class='label'>Payment Status:</span><span class='val' style='color: #4ade80;'>" + registration.getPaymentStatus() + "</span></div>" +
+                "        <div class='field'><span class='label'>Payment Status:</span><span class='val' style='color: #4ade80;'>" + registration.getPaymentStatus() + (registration.getRazorpayPaymentId() != null ? " (Paid via Razorpay: " + registration.getRazorpayPaymentId() + ")" : "") + "</span></div>" +
                 "        <div class='field'><span class='label'>Registration ID:</span><span class='val' style='font-family: monospace;'>" + registration.getId() + "</span></div>" +
                 "      </div>" +
                 "      <div class='qr-section'>" +
