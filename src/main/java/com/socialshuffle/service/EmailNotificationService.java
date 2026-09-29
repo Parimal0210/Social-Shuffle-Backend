@@ -30,6 +30,21 @@ public class EmailNotificationService {
         String encodedQrData = URLEncoder.encode(qrToken, StandardCharsets.UTF_8);
         String qrImageUrl = "https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=" + encodedQrData;
 
+        String guestListHtml = "";
+        if (registration.getGuests() != null && !registration.getGuests().isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < registration.getGuests().size(); i++) {
+                com.socialshuffle.model.GuestInfo g = registration.getGuests().get(i);
+                if (g.getName() != null && !g.getName().trim().isEmpty()) {
+                    if (sb.length() > 0) sb.append(", ");
+                    sb.append(g.getName().trim());
+                }
+            }
+            if (sb.length() > 0) {
+                guestListHtml = "<div class='field'><span class='label'>Accompanying Guests:</span><span class='val' style='color: #c084fc;'>" + sb.toString() + "</span></div>";
+            }
+        }
+
         return "<!DOCTYPE html>" +
                 "<html>" +
                 "<head>" +
@@ -73,6 +88,7 @@ public class EmailNotificationService {
                 "        <div class='field'><span class='label'>When:</span><span class='val'>" + eventTime + "</span></div>" +
                 "        <div class='field'><span class='label'>Where:</span><span class='val'>" + eventVenue + " (" + eventAddress + ")</span></div>" +
                 "        <div class='field'><span class='label'>Seats Reserved (PAX):</span><span class='val'>" + pax + " Shuffler(s)</span></div>" +
+                guestListHtml +
                 "        <div class='field'><span class='label'>Payment Status:</span><span class='val' style='color: #4ade80;'>" + registration.getPaymentStatus() + "</span></div>" +
                 "        <div class='field'><span class='label'>Registration ID:</span><span class='val' style='font-family: monospace;'>" + registration.getId() + "</span></div>" +
                 "      </div>" +

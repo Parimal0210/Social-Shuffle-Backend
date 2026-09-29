@@ -72,6 +72,18 @@ public class RegistrationController {
             registration.setPaymentStatus("Pending");
         }
 
+        // Sanitize and ensure IDs on guest objects
+        if (registration.getGuests() != null) {
+            for (GuestInfo g : registration.getGuests()) {
+                if (g.getId() == null || g.getId().trim().isEmpty()) {
+                    g.setId("guest-" + UUID.randomUUID().toString().substring(0, 8));
+                }
+                if (g.getName() != null) {
+                    g.setName(g.getName().trim());
+                }
+            }
+        }
+
         // Generate QR code pass
         String qrToken = "SS-REG-" + registration.getId();
         registration.setQrCodeToken(qrToken);
