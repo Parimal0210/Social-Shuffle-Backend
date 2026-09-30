@@ -26,6 +26,30 @@ public interface RegistrationRepository extends JpaRepository<Registration, Stri
 
     long countByEventIdAndAttendanceStatus(String eventId, String attendanceStatus);
 
+    Optional<Registration> findByQrCodeTokenIgnoreCase(String qrCodeToken);
+
+    Optional<Registration> findByIdOrQrCodeTokenIgnoreCase(String id, String qrCodeToken);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE Registration r SET r.participantId = :targetId WHERE r.participantId = :sourceId")
+    int reassignParticipantRegistrations(@Param("sourceId") String sourceId, @Param("targetId") String targetId);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE Registration r SET r.attendanceStatus = :status, r.checkInTime = :checkInTime WHERE r.id = :id")
+    int updateAttendanceFast(@Param("id") String id, @Param("status") String status, @Param("checkInTime") String checkInTime);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE Registration r SET r.paymentStatus = :status WHERE r.id = :id")
+    int updatePaymentFast(@Param("id") String id, @Param("status") String status);
+
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM Registration r WHERE r.eventId IN ('ev-35', 'evt-35', '35') AND (r.participantId = 'p-priya' OR LOWER(r.participantName) LIKE '%priya nair%' OR LOWER(r.participantEmail) LIKE '%priya.nair%')")
+    int deletePriyaEvent35();
+
     @Transactional
     @Modifying
     @Query("DELETE FROM Registration r WHERE r.participantId = :participantId")

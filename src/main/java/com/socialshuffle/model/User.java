@@ -4,7 +4,12 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+    @Index(name = "idx_user_email", columnList = "email"),
+    @Index(name = "idx_user_phone", columnList = "phone"),
+    @Index(name = "idx_user_role", columnList = "role"),
+    @Index(name = "idx_user_part_id", columnList = "participantId")
+})
 public class User {
 
     @Id

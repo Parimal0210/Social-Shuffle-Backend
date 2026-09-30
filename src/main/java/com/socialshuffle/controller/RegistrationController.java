@@ -52,22 +52,11 @@ public class RegistrationController {
 
     @DeleteMapping("/revert-priya-35")
     public ResponseEntity<?> revertPriyaNairEvent35() {
-        List<Registration> regs = registrationRepository.findAll();
-        List<Registration> toDelete = new ArrayList<>();
-        for (Registration r : regs) {
-            boolean isPriya = (r.getParticipantName() != null && r.getParticipantName().toLowerCase().contains("priya nair")) ||
-                              (r.getParticipantEmail() != null && r.getParticipantEmail().toLowerCase().contains("priya.nair")) ||
-                              "p-priya".equalsIgnoreCase(r.getParticipantId());
-            boolean isEvent35 = r.getEventId() != null && (r.getEventId().contains("35") || r.getEventId().equalsIgnoreCase("ev-35") || r.getEventId().equalsIgnoreCase("evt-35"));
-            if (isPriya && isEvent35) {
-                toDelete.add(r);
-            }
-        }
-        registrationRepository.deleteAll(toDelete);
+        int deleted = registrationRepository.deletePriyaEvent35();
         return ResponseEntity.ok(Map.of(
             "success", true,
             "message", "Reverted Priya Nair registration for Event #35.",
-            "revertedCount", toDelete.size()
+            "revertedCount", deleted
         ));
     }
 
@@ -155,14 +144,10 @@ public class RegistrationController {
         // Extract registration ID if prefixed with SS-REG-
         String regId = cleanedCode.startsWith("SS-REG-") ? cleanedCode.replace("SS-REG-", "") : cleanedCode;
 
-        // Try lookup by ID first, then by QR token
-        Optional<Registration> regOpt = registrationRepository.findById(regId);
+        // Perform fast O(1) indexed lookup by ID or QR Token (avoids full table scan)
+        Optional<Registration> regOpt = registrationRepository.findByIdOrQrCodeTokenIgnoreCase(regId, cleanedCode);
         if (regOpt.isEmpty()) {
-            List<Registration> all = registrationRepository.findAll();
-            regOpt = all.stream()
-                    .filter(r -> cleanedCode.equalsIgnoreCase(r.getQrCodeToken()) || 
-                                 (r.getId() != null && cleanedCode.equalsIgnoreCase(r.getId())))
-                    .findFirst();
+            regOpt = registrationRepository.findByQrCodeTokenIgnoreCase(cleanedCode);
         }
 
         if (regOpt.isEmpty()) {

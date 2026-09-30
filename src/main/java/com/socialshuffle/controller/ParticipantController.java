@@ -118,11 +118,8 @@ public class ParticipantController {
 
         participantRepository.save(target);
 
-        // Reassign registrations from source to target
-        registrationRepository.findByParticipantId(sourceId).forEach(reg -> {
-            reg.setParticipantId(targetId);
-            registrationRepository.save(reg);
-        });
+        // Reassign registrations from source to target in a single atomic database update
+        registrationRepository.reassignParticipantRegistrations(sourceId, targetId);
 
         // Delete source
         participantRepository.deleteById(sourceId);

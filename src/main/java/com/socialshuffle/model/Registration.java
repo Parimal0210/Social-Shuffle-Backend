@@ -1,6 +1,7 @@
 package com.socialshuffle.model;
 
 import com.socialshuffle.converter.GuestListConverter;
+import com.socialshuffle.converter.StringListConverter;
 import jakarta.persistence.*;
 
 import java.util.ArrayList;
@@ -11,7 +12,10 @@ import java.util.List;
     @Index(name = "idx_reg_event", columnList = "eventId"),
     @Index(name = "idx_reg_participant", columnList = "participantId"),
     @Index(name = "idx_reg_event_part", columnList = "eventId, participantId"),
-    @Index(name = "idx_reg_attendance", columnList = "attendanceStatus")
+    @Index(name = "idx_reg_attendance", columnList = "attendanceStatus"),
+    @Index(name = "idx_reg_payment", columnList = "paymentStatus"),
+    @Index(name = "idx_reg_qr_token", columnList = "qrCodeToken"),
+    @Index(name = "idx_reg_razorpay", columnList = "razorpayPaymentId")
 })
 public class Registration {
 
@@ -55,6 +59,21 @@ public class Registration {
     private String razorpayOrderId;
 
     private Double amountPaid;
+
+    @Column(length = 64)
+    private String qrCodeToken;
+
+    @Column(columnDefinition = "TEXT")
+    private String qrCodeUrl;
+
+    private Boolean emailSent = false;
+
+    @Column(length = 50)
+    private String emailSentAt;
+
+    @Convert(converter = StringListConverter.class)
+    @Column(columnDefinition = "TEXT")
+    private List<String> gamesPlayed = new ArrayList<>();
 
     public Registration() {
     }
@@ -185,5 +204,45 @@ public class Registration {
 
     public void setAmountPaid(Double amountPaid) {
         this.amountPaid = amountPaid;
+    }
+
+    public String getQrCodeToken() {
+        return qrCodeToken;
+    }
+
+    public void setQrCodeToken(String qrCodeToken) {
+        this.qrCodeToken = qrCodeToken;
+    }
+
+    public String getQrCodeUrl() {
+        return qrCodeUrl;
+    }
+
+    public void setQrCodeUrl(String qrCodeUrl) {
+        this.qrCodeUrl = qrCodeUrl;
+    }
+
+    public Boolean getEmailSent() {
+        return emailSent != null ? emailSent : false;
+    }
+
+    public void setEmailSent(Boolean emailSent) {
+        this.emailSent = emailSent;
+    }
+
+    public String getEmailSentAt() {
+        return emailSentAt;
+    }
+
+    public void setEmailSentAt(String emailSentAt) {
+        this.emailSentAt = emailSentAt;
+    }
+
+    public List<String> getGamesPlayed() {
+        return gamesPlayed != null ? gamesPlayed : new ArrayList<>();
+    }
+
+    public void setGamesPlayed(List<String> gamesPlayed) {
+        this.gamesPlayed = gamesPlayed != null ? gamesPlayed : new ArrayList<>();
     }
 }

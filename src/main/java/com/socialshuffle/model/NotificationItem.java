@@ -5,7 +5,7 @@ import jakarta.persistence.*;
 @Entity
 @Table(name = "notifications", indexes = {
     @Index(name = "idx_notif_timestamp", columnList = "timestamp"),
-    @Index(name = "idx_notif_read", columnList = "isRead")
+    @Index(name = "idx_notif_read", columnList = "is_read")
 })
 public class NotificationItem {
 
