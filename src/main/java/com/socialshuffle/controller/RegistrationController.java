@@ -318,6 +318,38 @@ public class RegistrationController {
         return ResponseEntity.ok(saved);
     }
 
+    @PostMapping("/bulk-import")
+    public ResponseEntity<?> bulkImportRegistrations(@RequestBody List<Registration> registrations) {
+        if (registrations == null || registrations.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "No registrations provided."));
+        }
+        for (Registration reg : registrations) {
+            if (reg.getId() == null || reg.getId().trim().isEmpty()) {
+                reg.setId("reg-imp-" + UUID.randomUUID().toString().substring(0, 8));
+            }
+            if (reg.getRegisteredAt() == null) {
+                reg.setRegisteredAt(Instant.now().toString());
+            }
+            if (reg.getAttendanceStatus() == null) {
+                reg.setAttendanceStatus("Pending");
+            }
+            if (reg.getPaymentStatus() == null) {
+                reg.setPaymentStatus("Confirmed");
+            }
+            if (reg.getQrCodeToken() == null) {
+                String token = "SS-REG-" + reg.getId();
+                reg.setQrCodeToken(token);
+                reg.setQrCodeUrl("https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=" + token);
+            }
+        }
+        List<Registration> saved = registrationRepository.saveAll(registrations);
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "importedCount", saved.size(),
+            "registrations", saved
+        ));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> cancelRegistration(@PathVariable String id) {
         return registrationRepository.findById(id).map(reg -> {
