@@ -27,6 +27,15 @@ public class NotificationItem {
     @Column(name = "is_read")
     private boolean read = false;
 
+    @Column(name = "recipient_email", length = 120)
+    private String recipientEmail;
+
+    @Column(name = "event_id", length = 64)
+    private String eventId;
+
+    @Column(name = "delivery_status", length = 32)
+    private String deliveryStatus = "Sent";
+
     public NotificationItem() {
     }
 
@@ -37,6 +46,31 @@ public class NotificationItem {
         this.type = type;
         this.timestamp = timestamp;
         this.read = read;
+        this.deliveryStatus = "Sent";
+    }
+
+    public String getRecipientEmail() {
+        return recipientEmail;
+    }
+
+    public void setRecipientEmail(String recipientEmail) {
+        this.recipientEmail = recipientEmail;
+    }
+
+    public String getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(String eventId) {
+        this.eventId = eventId;
+    }
+
+    public String getDeliveryStatus() {
+        return deliveryStatus;
+    }
+
+    public void setDeliveryStatus(String deliveryStatus) {
+        this.deliveryStatus = deliveryStatus;
     }
 
     public String getId() {
