@@ -10,7 +10,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Automatically seeds initial Pune board game data into MySQL if tables are empty.
+ * Automatically seeds initial Pune board game data into PostgreSQL / Supabase if tables are empty.
  */
 @Component
 public class DataSeeder implements CommandLineRunner {

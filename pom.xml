@@ -15,7 +15,7 @@
     <artifactId>social-shuffle-backend</artifactId>
     <version>1.0</version>
     <name>Social Shuffle Backend</name>
-    <description>Spring Boot REST API with MySQL Persistence for Social Shuffle Pune (GoDaddy / Cloud / Local)</description>
+    <description>Spring Boot REST API with PostgreSQL (Supabase) Persistence for Social Shuffle Pune</description>
     
     <properties>
         <java.version>17</java.version>
@@ -44,7 +44,7 @@
             <artifactId>jackson-annotations</artifactId>
         </dependency>
         
-        <!-- Spring Data JPA for Relational ORM / MySQL Persistence -->
+        <!-- Spring Data JPA for Relational ORM / PostgreSQL & Cloud DB Persistence -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>

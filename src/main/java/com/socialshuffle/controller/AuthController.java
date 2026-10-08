@@ -100,7 +100,7 @@ public class AuthController {
         String rawPassword = (req.getPassword() != null && !req.getPassword().trim().isEmpty()) ? req.getPassword() : "shuffler123";
         String securePasswordHash = passwordSecurityUtil.hashPassword(rawPassword);
 
-        // Create participant profile in MySQL database
+        // Create participant profile in PostgreSQL database
         Participant participant = new Participant(participantId, safeName, email, phone, safeArea);
         participant.setBio(safeBio);
         participant.setAvatar(req.getAvatar());

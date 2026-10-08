@@ -19,6 +19,12 @@ The backend is connected out-of-the-box to **Supabase PostgreSQL**:
 ### Automatic Table Creation & Data Seeding
 Spring Boot and Hibernate (`spring.jpa.hibernate.ddl-auto=update`) automatically creates all PostgreSQL tables (`events`, `games`, `participants`, `registrations`, `event_feedback`, `safety_reports`, `volunteer_applications`, `audit_logs`, `notifications`) and `DataSeeder.java` seeds initial Pune board games and meetup schedules on first startup.
 
+### Supabase SQL Editor 1-Click Import (Optional)
+If you prefer to initialize or inspect the tables directly in the Supabase Dashboard:
+1. Open your **Supabase Project** ➔ **SQL Editor**.
+2. Open `social_shuffle_supabase_postgres.sql` from this repository.
+3. Paste the contents and click **Run**. All 11 PostgreSQL tables, indexes, and initial Pune board game data will be created with `ON CONFLICT DO NOTHING` safety!
+
 ### Environment Variable Overrides (Optional)
 If running on Docker / Cloud / Render:
 ```bash
@@ -82,19 +88,19 @@ mvn spring-boot:run
 
 ---
 
-## 🛠️ Running Locally in Spring Tool Suite (STS)
+## 🛠️ Running Locally in Spring Tool Suite (STS) / IntelliJ / VS Code
 
 ### 1. Prerequisites
 - **Java Development Kit (JDK 17 or 21)**.
-- **MySQL 8.x** running locally (`localhost:3306`) OR GoDaddy Remote MySQL.
-- **Spring Tool Suite 4 (STS)** or Eclipse with Spring Tools.
+- **Supabase Cloud PostgreSQL** (pre-configured) OR local PostgreSQL 15/16/17 (or MySQL).
+- **Spring Tool Suite 4 (STS)**, IntelliJ IDEA, or VS Code with Spring Tools.
 
 ### 2. Import into STS
 1. Open **Spring Tool Suite (STS)**.
 2. Click **File** ➔ **Import...**
 3. Select **Maven** ➔ **Existing Maven Projects** and click **Next**.
 4. Browse to this backend folder, ensure `pom.xml` is checked, and click **Finish**.
-5. Maven will download `spring-boot-starter-data-jpa` and `mysql-connector-j`.
+5. Maven will download `spring-boot-starter-data-jpa` and `postgresql` JDBC driver.
 
 ### 3. Run the Application
 1. In the **Package Explorer**, right-click `SocialShuffleApplication.java`.
@@ -104,10 +110,10 @@ mvn spring-boot:run
    =================================================
    🎲 Social Shuffle Pune Spring Boot API Started!
    📡 Server running at: http://localhost:8080/api
-   🐬 MySQL Connected (GoDaddy cPanel / Local DB)
+   🐘 Database Connected (PostgreSQL / Supabase Cloud DB)
    =================================================
    ```
-4. `DataSeeder.java` will automatically verify your MySQL tables and seed Pune board games, upcoming meetups, and participant data if empty.
+4. `DataSeeder.java` will automatically verify your PostgreSQL tables and seed Pune board games, upcoming meetups, and participant data if empty.
 
 ---
 
@@ -115,7 +121,7 @@ mvn spring-boot:run
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/system/health` | Health check, MySQL connection status & table row counts |
+| `GET` | `/api/system/health` | Health check, PostgreSQL (Supabase) connection status & table row counts |
 | `POST`| `/api/auth/login` | Email/Phone + password participant and admin login |
 | `POST`| `/api/auth/register` | Self-register as a participant |
 | `POST`| `/api/auth/google` | Google OAuth Sign-In & auto-registration |
@@ -151,5 +157,5 @@ mvn spring-boot:run
 
 ## 💻 Connecting to Frontend
 In the React frontend, go to **Admin Console ➔ Backend & Database Hub**:
-- Set API URL to `http://localhost:8080/api` (or your GoDaddy server URL, e.g. `https://api.yourdomain.com/api`).
-- Click **Test Connection** to verify live communication with MySQL.
+- Set API URL to `http://localhost:8080/api` (or your deployed backend URL).
+- Click **Test Connection** to verify live communication with PostgreSQL (Supabase).
