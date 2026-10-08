@@ -149,12 +149,12 @@ public class DataSeeder implements CommandLineRunner {
 
     private void seedGames() {
         if (gameRepository.count() == 0) {
-            BoardGame g1 = new BoardGame("g-catan", "Catan", "Strategy", "3-4", "60-90 min", "Medium", "Aman Joshi", true, "Lane 6 Cafe", "The iconic resource trading game that started modern board gaming.");
-            BoardGame g2 = new BoardGame("g-avalon", "The Resistance: Avalon", "Social Deduction", "5-10", "30-45 min", "Easy", "Community Box", true, "Lane 6 Cafe", "Test loyalties, discover minions of Mordred, and embark on quests.");
-            BoardGame g3 = new BoardGame("g-ticket", "Ticket to Ride: Europe", "Family Strategy", "2-5", "45-60 min", "Easy", "Parimal Shete", true, "FC Road Cafe", "Build train routes connecting iconic European cities.");
-            BoardGame g4 = new BoardGame("g-codenames", "Codenames", "Party / Word", "4-8+", "15-20 min", "Easy", "Community Box", true, "Lane 6 Cafe", "Two rival spymasters know the secret identities of 25 agents.");
-            BoardGame g5 = new BoardGame("g-splendor", "Splendor", "Engine Building", "2-4", "30 min", "Easy", "Rohan Kulkarni", true, "Baner Venue", "Renaissance merchants collecting gem tokens to acquire cards and nobles.");
-            BoardGame g6 = new BoardGame("g-wingspan", "Wingspan", "Engine Building", "1-5", "40-70 min", "Medium", "Aman Joshi", true, "Baner Venue", "Attract beautiful birds to your wildlife preserve.");
+            Game g1 = new Game("g-catan", "Catan", "Strategy", "3-4", "60-90 min", "Medium", "Aman Joshi", true, "Lane 6 Cafe", "The iconic resource trading game that started modern board gaming.");
+            Game g2 = new Game("g-avalon", "The Resistance: Avalon", "Social Deduction", "5-10", "30-45 min", "Easy", "Community Box", true, "Lane 6 Cafe", "Test loyalties, discover minions of Mordred, and embark on quests.");
+            Game g3 = new Game("g-ticket", "Ticket to Ride: Europe", "Family Strategy", "2-5", "45-60 min", "Easy", "Parimal Shete", true, "FC Road Cafe", "Build train routes connecting iconic European cities.");
+            Game g4 = new Game("g-codenames", "Codenames", "Party / Word", "4-8+", "15-20 min", "Easy", "Community Box", true, "Lane 6 Cafe", "Two rival spymasters know the secret identities of 25 agents.");
+            Game g5 = new Game("g-splendor", "Splendor", "Engine Building", "2-4", "30 min", "Easy", "Rohan Kulkarni", true, "Baner Venue", "Renaissance merchants collecting gem tokens to acquire cards and nobles.");
+            Game g6 = new Game("g-wingspan", "Wingspan", "Engine Building", "1-5", "40-70 min", "Medium", "Aman Joshi", true, "Baner Venue", "Attract beautiful birds to your wildlife preserve.");
 
             gameRepository.saveAll(Arrays.asList(g1, g2, g3, g4, g5, g6));
         }
@@ -186,13 +186,13 @@ public class DataSeeder implements CommandLineRunner {
 
     private void seedRegistrations() {
         if (registrationRepository.count() == 0) {
-            EventRegistration r1 = new EventRegistration("r-101", "evt-35", "p-rahul", "Rohan Kulkarni", "rohan.kulkarni@example.com", "+91 98220 12345", 1, "Paid", "UPI", 350, "Registered", "2026-09-22 14:30");
+            Registration r1 = new Registration("r-101", "evt-35", "p-rahul", "Rohan Kulkarni", "rohan.kulkarni@example.com", "+91 98220 12345", 1, "Paid", "UPI", 350.0, "Registered", "2026-09-22 14:30");
             r1.setTicketCode("SHUFFLE-35-RK01");
 
-            EventRegistration r2 = new EventRegistration("r-102", "evt-35", "p-ananya", "Ananya Deshmukh", "ananya.d@example.com", "+91 97654 32100", 2, "Paid", "Razorpay", 700, "Registered", "2026-09-23 11:15");
+            Registration r2 = new Registration("r-102", "evt-35", "p-ananya", "Ananya Deshmukh", "ananya.d@example.com", "+91 97654 32100", 2, "Paid", "Razorpay", 700.0, "Registered", "2026-09-23 11:15");
             r2.setTicketCode("SHUFFLE-35-AD02");
 
-            EventRegistration r3 = new EventRegistration("r-103", "evt-34", "p-sid", "Siddharth Mehta", "siddharth.m@example.com", "+91 98901 23456", 1, "Paid", "UPI", 350, "Checked In", "2026-09-18 19:40");
+            Registration r3 = new Registration("r-103", "evt-34", "p-sid", "Siddharth Mehta", "siddharth.m@example.com", "+91 98901 23456", 1, "Paid", "UPI", 350.0, "Checked In", "2026-09-18 19:40");
             r3.setTicketCode("SHUFFLE-34-SM01");
 
             registrationRepository.saveAll(Arrays.asList(r1, r2, r3));

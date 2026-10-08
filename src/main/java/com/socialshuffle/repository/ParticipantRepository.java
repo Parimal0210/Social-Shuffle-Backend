@@ -18,6 +18,8 @@ public interface ParticipantRepository extends JpaRepository<Participant, String
 
     Optional<Participant> findByEmailIgnoreCaseOrPhone(String email, String phone);
 
+    Optional<Participant> findByEmailOrPhone(String email, String phone);
+
     List<Participant> findByAreaIgnoreCase(String area);
 
     @Query("SELECT p FROM Participant p WHERE " +

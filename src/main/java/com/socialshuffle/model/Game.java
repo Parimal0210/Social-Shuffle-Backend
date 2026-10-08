@@ -39,7 +39,33 @@ public class Game {
     @Column(columnDefinition = "TEXT")
     private String image;
 
+    private String owner;
+    private String venue;
+
     public Game() {
+    }
+
+    public Game(String id, String name, String category, String players, String duration, String difficulty, String description) {
+        this.id = id;
+        this.name = name;
+        this.category = category;
+        this.players = players;
+        this.duration = duration;
+        this.difficulty = difficulty;
+        this.description = description;
+    }
+
+    public Game(String id, String name, String category, String players, String duration, String difficulty, String owner, boolean active, String venue, String description) {
+        this.id = id;
+        this.name = name;
+        this.category = category;
+        this.players = players;
+        this.duration = duration;
+        this.difficulty = difficulty;
+        this.owner = owner;
+        this.active = active;
+        this.venue = venue;
+        this.description = description;
     }
 
     public String getId() {
@@ -136,5 +162,21 @@ public class Game {
 
     public void setImage(String image) {
         this.image = image;
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public void setOwner(String owner) {
+        this.owner = owner;
+    }
+
+    public String getVenue() {
+        return venue;
+    }
+
+    public void setVenue(String venue) {
+        this.venue = venue;
     }
 }

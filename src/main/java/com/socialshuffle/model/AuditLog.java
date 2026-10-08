@@ -37,6 +37,10 @@ public class AuditLog {
         this.timestamp = timestamp;
     }
 
+    public AuditLog(String id, String adminName, String action, String details, String timestamp) {
+        this(id, adminName, action, "System", details, timestamp);
+    }
+
     public String getId() {
         return id;
     }

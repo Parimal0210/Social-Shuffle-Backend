@@ -75,7 +75,36 @@ public class Registration {
     @Column(columnDefinition = "TEXT")
     private List<String> gamesPlayed = new ArrayList<>();
 
+    @Column(length = 64)
+    private String ticketCode;
+
     public Registration() {
+    }
+
+    public Registration(String id, String eventId, String participantId, String participantName,
+                        String participantEmail, String participantPhone, int paxCount,
+                        String paymentStatus, String razorpayPaymentId, Double amountPaid,
+                        String attendanceStatus, String registeredAt) {
+        this.id = id;
+        this.eventId = eventId;
+        this.participantId = participantId;
+        this.participantName = participantName;
+        this.participantEmail = participantEmail;
+        this.participantPhone = participantPhone;
+        this.paxCount = paxCount;
+        this.paymentStatus = paymentStatus;
+        this.razorpayPaymentId = razorpayPaymentId;
+        this.amountPaid = amountPaid;
+        this.attendanceStatus = attendanceStatus;
+        this.registeredAt = registeredAt;
+    }
+
+    public String getTicketCode() {
+        return ticketCode != null ? ticketCode : qrCodeToken;
+    }
+
+    public void setTicketCode(String ticketCode) {
+        this.ticketCode = ticketCode;
     }
 
     public String getId() {

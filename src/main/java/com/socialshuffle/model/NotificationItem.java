@@ -49,6 +49,17 @@ public class NotificationItem {
         this.deliveryStatus = "Sent";
     }
 
+    public NotificationItem(String id, String title, String message, String timestamp, boolean read, String eventId) {
+        this.id = id;
+        this.title = title;
+        this.message = message;
+        this.type = "registration";
+        this.timestamp = timestamp;
+        this.read = read;
+        this.eventId = eventId;
+        this.deliveryStatus = "Sent";
+    }
+
     public String getRecipientEmail() {
         return recipientEmail;
     }
