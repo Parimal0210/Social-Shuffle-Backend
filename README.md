@@ -1,11 +1,35 @@
-# 🎲 Social Shuffle — Spring Boot & MySQL Backend (STS & GoDaddy Ready)
+# 🎲 Social Shuffle — Spring Boot Backend (Supabase PostgreSQL & MySQL Ready)
 
-Production-grade Spring Boot 3.x REST API with **Spring Data JPA & MySQL** for **Social Shuffle** (Pune's Board Game Community).
-Fully compatible with **GoDaddy cPanel MySQL hosting**, Local MySQL 8.x, and cloud MySQL (AWS RDS / GCP Cloud SQL).
+Production-grade Spring Boot 3.x REST API with **Spring Data JPA & PostgreSQL / MySQL** for **Social Shuffle** (Pune's Board Game Community).
+Pre-configured for **Supabase PostgreSQL Cloud Database**, Docker, Local development, and **GoDaddy cPanel MySQL hosting**.
 
 ---
 
-## 🚀 Setting up with GoDaddy MySQL (cPanel Hosting)
+## ⚡ Supabase PostgreSQL Database Setup (Active Configuration)
+
+The backend is connected out-of-the-box to **Supabase PostgreSQL**:
+
+- **Host**: `db.pngqqlrrqovdkzvljgjc.supabase.co`
+- **Port**: `5432`
+- **Database**: `postgres`
+- **User**: `postgres`
+- **SSL**: `require`
+- **Connection String**: `postgresql://postgres:u7ihNL9yTUg8MnTw@db.pngqqlrrqovdkzvljgjc.supabase.co:5432/postgres`
+
+### Automatic Table Creation & Data Seeding
+Spring Boot and Hibernate (`spring.jpa.hibernate.ddl-auto=update`) automatically creates all PostgreSQL tables (`events`, `games`, `participants`, `registrations`, `event_feedback`, `safety_reports`, `volunteer_applications`, `audit_logs`, `notifications`) and `DataSeeder.java` seeds initial Pune board games and meetup schedules on first startup.
+
+### Environment Variable Overrides (Optional)
+If running on Docker / Cloud / Render:
+```bash
+export SPRING_DATASOURCE_URL="jdbc:postgresql://db.pngqqlrrqovdkzvljgjc.supabase.co:5432/postgres?sslmode=require"
+export DB_USER="postgres"
+export DB_PASSWORD="YourPassword"
+```
+
+---
+
+## 🚀 Setting up with GoDaddy MySQL (cPanel Hosting Alternate)
 
 GoDaddy Linux / cPanel hosting comes with MySQL database management built-in. Follow these simple steps:
 

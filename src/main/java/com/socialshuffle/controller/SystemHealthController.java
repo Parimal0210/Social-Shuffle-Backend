@@ -53,7 +53,7 @@ public class SystemHealthController {
         health.put("status", "UP");
         health.put("service", "Social Shuffle Spring Boot REST API");
         health.put("version", "1.0.0");
-        health.put("database", "MySQL");
+        health.put("database", "PostgreSQL (Supabase)");
 
         // Lazy initialize and cache static database metadata to avoid repeated information_schema queries
         if (cachedMetadata == null) {

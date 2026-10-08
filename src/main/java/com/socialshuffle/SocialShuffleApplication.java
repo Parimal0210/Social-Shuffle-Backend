@@ -15,7 +15,7 @@ public class SocialShuffleApplication {
         System.out.println("=================================================");
         System.out.println("🎲 Social Shuffle Pune Spring Boot API Started!");
         System.out.println("📡 Server running at: http://localhost:8080/api");
-        System.out.println("🐬 MySQL Connected (GoDaddy cPanel / Local DB)");
+        System.out.println("🐘 Database Connected (PostgreSQL / Supabase Cloud DB)");
         System.out.println("=================================================");
     }
 }
