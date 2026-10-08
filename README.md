@@ -119,6 +119,9 @@ mvn spring-boot:run
 | `GET/POST`| `/api/community/volunteers` | Volunteer application workflow |
 | `GET` | `/api/audit-logs` | Admin action audit log |
 | `GET` | `/api/notifications` | Notifications & alerts |
+| `GET` | `/api/badges/levels` | List all 10 badge level definitions with requirements, fancy names & perks |
+| `POST`| `/api/badges/calculate` | Calculate 10-level badge from games played & events attended (90%+ = Level 10 Mythic Tabletop Archon) |
+| `GET` | `/api/badges/participant/{id}` | Compute badge level directly for a participant by ID |
 
 ---
 
