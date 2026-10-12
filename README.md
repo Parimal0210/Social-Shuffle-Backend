@@ -167,5 +167,15 @@ mvn spring-boot:run
 
 ## 💻 Connecting to Frontend
 In the React frontend, go to **Admin Console ➔ Backend & Database Hub**:
-- Set API URL to `http://localhost:8080/api` (or your deployed backend URL).
+- Set API URL to `https://social-shuffle-backend.onrender.com/api` (or `http://localhost:8080/api` locally).
 - Click **Test Connection** to verify live communication with PostgreSQL (Supabase).
+
+### Backend Endpoint Variables (`application.properties`)
+The Spring Boot backend defines configurable API endpoint properties for frontend communication:
+```properties
+app.api.endpoint=https://social-shuffle-backend.onrender.com/api
+app.api.base-url=https://social-shuffle-backend.onrender.com/api
+app.backend.public-url=https://social-shuffle-backend.onrender.com
+backend.api.endpoint=https://social-shuffle-backend.onrender.com/api
+```
+These can be overridden at runtime using the environment variables `APP_API_ENDPOINT` or `APP_API_BASE_URL`.

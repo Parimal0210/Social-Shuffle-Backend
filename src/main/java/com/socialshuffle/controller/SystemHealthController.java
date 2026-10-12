@@ -24,6 +24,9 @@ public class SystemHealthController {
     private final SafetyReportRepository safetyReportRepository;
     private final VolunteerApplicationRepository volunteerRepository;
 
+    @org.springframework.beans.factory.annotation.Value("${app.api.endpoint:https://social-shuffle-backend.onrender.com/api}")
+    private String apiEndpoint;
+
     public SystemHealthController(DataSource dataSource,
                                   ShuffleEventRepository eventRepository,
                                   GameRepository gameRepository,
@@ -54,6 +57,7 @@ public class SystemHealthController {
         health.put("service", "Social Shuffle Spring Boot REST API");
         health.put("version", "1.0.0");
         health.put("database", "PostgreSQL (Supabase)");
+        health.put("apiEndpoint", apiEndpoint != null ? apiEndpoint : "https://social-shuffle-backend.onrender.com/api");
 
         // Lazy initialize and cache static database metadata to avoid repeated information_schema queries
         if (cachedMetadata == null) {
