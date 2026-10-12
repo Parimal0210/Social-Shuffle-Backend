@@ -5,4 +5,4 @@ RUN mvn clean package -DskipTests
 FROM openjdk:17.0.1-jdk-slim
 COPY --from=build /target/social-shuffle-backend-1.0.jar socialshuffle.jar
 EXPOSE 8080
-ENTRYPOINT ["java","-jar","socialshuffle.jar"]
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-XX:InitialRAMPercentage=40.0", "-Xss512k", "-jar", "socialshuffle.jar"]

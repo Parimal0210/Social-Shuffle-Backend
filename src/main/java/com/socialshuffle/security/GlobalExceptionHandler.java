@@ -5,9 +5,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.sql.SQLException;
 import java.util.HashMap;
@@ -19,14 +21,35 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
+     * Handles missing endpoints / static resources with clean 404 (prevents Render health check 500 errors)
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResourceFound(NoResourceFoundException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "Endpoint not found: " + ex.getResourcePath());
+        body.put("status", HttpStatus.NOT_FOUND.value());
+        body.put("availableEndpoints", "/api/system/health");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    /**
+     * Handles unsupported HTTP methods cleanly
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "HTTP method not supported: " + ex.getMethod());
+        body.put("status", HttpStatus.METHOD_NOT_ALLOWED.value());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
+    }
+
+    /**
      * Prevents database errors (SQL syntax, table names, constraint details) from leaking to client
      */
     @ExceptionHandler({DataAccessException.class, SQLException.class})
     public ResponseEntity<Map<String, Object>> handleDatabaseException(Exception ex) {
-        // Log internally for administrator/developer debugging with stack trace
         log.error("Internal Database Exception caught securely: {}", ex.getMessage(), ex);
 
-        // Sanitize response to client: Never expose table names, column names, or SQL statements
         Map<String, Object> body = new HashMap<>();
         body.put("error", "Database operation failed. Request could not be processed.");
         body.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
