@@ -7,14 +7,24 @@ Pre-configured for **Supabase PostgreSQL Cloud Database**, Docker, Local develop
 
 ## ⚡ Supabase PostgreSQL Database Setup (Active Configuration)
 
-The backend is connected out-of-the-box to **Supabase PostgreSQL**:
+The backend is connected out-of-the-box using the **Supabase IPv4 Connection Pooler** (Session Mode, Port 5432). This resolves over IPv4 and prevents `java.net.SocketException: Network is unreachable` on IPv4-only platforms like **Render**, AWS, Heroku, and Docker:
 
-- **Host**: `db.pngqqlrrqovdkzvljgjc.supabase.co`
-- **Port**: `5432`
+- **Host**: `aws-0-ap-southeast-2.pooler.supabase.com`
+- **Port**: `5432` (Session mode for HikariCP & Hibernate)
 - **Database**: `postgres`
-- **User**: `postgres`
+- **User**: `postgres.pngqqlrrqovdkzvljgjc`
+- **Password**: `u7ihNL9yTUg8MnTw`
 - **SSL**: `require`
-- **Connection String**: `postgresql://postgres:u7ihNL9yTUg8MnTw@db.pngqqlrrqovdkzvljgjc.supabase.co:5432/postgres`
+- **Connection String**: `postgresql://postgres.pngqqlrrqovdkzvljgjc:u7ihNL9yTUg8MnTw@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres`
+
+### Render Environment Variables Configuration
+If configuring Environment Variables in your **Render Web Service** dashboard:
+```bash
+SPRING_DATASOURCE_URL=jdbc:postgresql://aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres?sslmode=require
+DB_USER=postgres.pngqqlrrqovdkzvljgjc
+DB_PASSWORD=u7ihNL9yTUg8MnTw
+```
+*(Or leave them empty — `application.properties` now defaults directly to the IPv4 pooler!)*
 
 ### Automatic Table Creation & Data Seeding
 Spring Boot and Hibernate (`spring.jpa.hibernate.ddl-auto=update`) automatically creates all PostgreSQL tables (`events`, `games`, `participants`, `registrations`, `event_feedback`, `safety_reports`, `volunteer_applications`, `audit_logs`, `notifications`) and `DataSeeder.java` seeds initial Pune board games and meetup schedules on first startup.
