@@ -2,9 +2,10 @@ package com.socialshuffle.model;
 
 import com.socialshuffle.converter.StringListConverter;
 import jakarta.persistence.*;
-
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "games", indexes = {
@@ -12,34 +13,52 @@ import java.util.List;
     @Index(name = "idx_game_difficulty", columnList = "difficulty"),
     @Index(name = "idx_game_active", columnList = "active")
 })
-public class Game {
+public class Game implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
+    @Column(name = "name")
     private String name;
+
+    @Column(name = "category")
     private String category;
+
+    @Column(name = "difficulty")
     private String difficulty;
+
+    @Column(name = "players")
     private String players;
+
+    @Column(name = "duration")
     private String duration;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    @Column(name = "active", nullable = false)
     private boolean active = true;
+
+    @Column(name = "plays_count")
     private int playsCount = 0;
 
     @Convert(converter = StringListConverter.class)
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "tags", columnDefinition = "TEXT")
     private List<String> tags = new ArrayList<>();
 
+    @Column(name = "rating")
     private Double rating;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "image", columnDefinition = "TEXT")
     private String image;
 
+    @Column(name = "owner")
     private String owner;
+
+    @Column(name = "venue")
     private String venue;
 
     public Game() {
@@ -178,5 +197,28 @@ public class Game {
 
     public void setVenue(String venue) {
         this.venue = venue;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Game game = (Game) o;
+        return Objects.equals(id, game.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "Game{" +
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", category='" + category + '\'' +
+                ", active=" + active +
+                '}';
     }
 }

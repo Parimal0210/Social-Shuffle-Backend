@@ -1,39 +1,53 @@
 package com.socialshuffle.model;
 
 import jakarta.persistence.*;
+import java.io.Serializable;
+import java.util.Objects;
 
 @Entity
 @Table(name = "event_feedback", indexes = {
-    @Index(name = "idx_feedback_event", columnList = "eventId"),
-    @Index(name = "idx_feedback_participant", columnList = "participantId")
+    @Index(name = "idx_feedback_event", columnList = "event_id"),
+    @Index(name = "idx_feedback_participant", columnList = "participant_id")
 })
-public class EventFeedback {
+public class EventFeedback implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
-    @Column(nullable = false, length = 64)
+    @Column(name = "event_id", nullable = false, length = 64)
     private String eventId;
 
+    @Column(name = "event_title")
     private String eventTitle;
 
-    @Column(length = 64)
+    @Column(name = "participant_id", length = 64)
     private String participantId;
 
+    @Column(name = "participant_name")
     private String participantName;
 
+    @Column(name = "anonymous", nullable = false)
     private boolean anonymous = false;
 
+    @Column(name = "overall_rating")
     private int overallRating; // 1-5
+
+    @Column(name = "venue_rating")
     private int venueRating;
+
+    @Column(name = "game_rating")
     private int gameRating;
+
+    @Column(name = "host_rating")
     private int hostRating;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "suggestions", columnDefinition = "TEXT")
     private String suggestions;
 
-    @Column(length = 50)
+    @Column(name = "created_at", length = 50)
     private String createdAt;
 
     public EventFeedback() {
@@ -133,5 +147,28 @@ public class EventFeedback {
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        EventFeedback that = (EventFeedback) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "EventFeedback{" +
+                "id='" + id + '\'' +
+                ", eventId='" + eventId + '\'' +
+                ", participantName='" + participantName + '\'' +
+                ", overallRating=" + overallRating +
+                '}';
     }
 }

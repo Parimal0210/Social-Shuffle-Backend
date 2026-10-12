@@ -1,6 +1,11 @@
 package com.socialshuffle.dto;
 
-public class BadgeCalculationRequest {
+import java.io.Serializable;
+
+public class BadgeCalculationRequest implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
     private int gamesPlayedCount;
     private int totalGamesCount = 24;
     private int eventsAttendedCount;

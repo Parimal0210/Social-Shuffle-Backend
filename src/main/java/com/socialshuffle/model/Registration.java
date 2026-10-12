@@ -3,79 +3,93 @@ package com.socialshuffle.model;
 import com.socialshuffle.converter.GuestListConverter;
 import com.socialshuffle.converter.StringListConverter;
 import jakarta.persistence.*;
-
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "registrations", indexes = {
-    @Index(name = "idx_reg_event", columnList = "eventId"),
-    @Index(name = "idx_reg_participant", columnList = "participantId"),
-    @Index(name = "idx_reg_event_part", columnList = "eventId, participantId"),
-    @Index(name = "idx_reg_attendance", columnList = "attendanceStatus"),
-    @Index(name = "idx_reg_payment", columnList = "paymentStatus"),
-    @Index(name = "idx_reg_qr_token", columnList = "qrCodeToken"),
-    @Index(name = "idx_reg_razorpay", columnList = "razorpayPaymentId")
+    @Index(name = "idx_reg_event", columnList = "event_id"),
+    @Index(name = "idx_reg_participant", columnList = "participant_id"),
+    @Index(name = "idx_reg_event_part", columnList = "event_id, participant_id"),
+    @Index(name = "idx_reg_attendance", columnList = "attendance_status"),
+    @Index(name = "idx_reg_payment", columnList = "payment_status"),
+    @Index(name = "idx_reg_qr_token", columnList = "qr_code_token"),
+    @Index(name = "idx_reg_ticket_code", columnList = "ticket_code"),
+    @Index(name = "idx_reg_razorpay", columnList = "razorpay_payment_id")
 })
-public class Registration {
+public class Registration implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
-    @Column(nullable = false, length = 64)
+    @Column(name = "event_id", nullable = false, length = 64)
     private String eventId;
 
-    @Column(nullable = false, length = 64)
+    @Column(name = "participant_id", nullable = false, length = 64)
     private String participantId;
 
+    @Column(name = "participant_name")
     private String participantName;
+
+    @Column(name = "participant_email")
     private String participantEmail;
+
+    @Column(name = "participant_phone")
     private String participantPhone;
+
+    @Column(name = "participant_area")
     private String participantArea;
 
+    @Column(name = "pax_count")
     private int paxCount = 1;
 
     @Convert(converter = GuestListConverter.class)
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "guests", columnDefinition = "TEXT")
     private List<GuestInfo> guests = new ArrayList<>();
 
-    @Column(length = 30)
+    @Column(name = "payment_status", length = 30)
     private String paymentStatus = "Pending"; // Confirmed, Pending, Waived
 
-    @Column(length = 30)
+    @Column(name = "attendance_status", length = 30)
     private String attendanceStatus = "Pending"; // Checked In, Pending, Cancelled, No Show
 
-    @Column(length = 50)
+    @Column(name = "check_in_time", length = 50)
     private String checkInTime;
 
-    @Column(length = 50)
+    @Column(name = "registered_at", length = 50)
     private String registeredAt;
 
-    @Column(length = 64)
+    @Column(name = "razorpay_payment_id", length = 64)
     private String razorpayPaymentId;
 
-    @Column(length = 64)
+    @Column(name = "razorpay_order_id", length = 64)
     private String razorpayOrderId;
 
+    @Column(name = "amount_paid")
     private Double amountPaid;
 
-    @Column(length = 64)
+    @Column(name = "qr_code_token", length = 64)
     private String qrCodeToken;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "qr_code_url", columnDefinition = "TEXT")
     private String qrCodeUrl;
 
+    @Column(name = "email_sent")
     private Boolean emailSent = false;
 
-    @Column(length = 50)
+    @Column(name = "email_sent_at", length = 50)
     private String emailSentAt;
 
     @Convert(converter = StringListConverter.class)
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "games_played", columnDefinition = "TEXT")
     private List<String> gamesPlayed = new ArrayList<>();
 
-    @Column(length = 64)
+    @Column(name = "ticket_code", length = 64)
     private String ticketCode;
 
     public Registration() {
@@ -273,5 +287,30 @@ public class Registration {
 
     public void setGamesPlayed(List<String> gamesPlayed) {
         this.gamesPlayed = gamesPlayed != null ? gamesPlayed : new ArrayList<>();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Registration that = (Registration) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "Registration{" +
+                "id='" + id + '\'' +
+                ", eventId='" + eventId + '\'' +
+                ", participantId='" + participantId + '\'' +
+                ", participantName='" + participantName + '\'' +
+                ", paymentStatus='" + paymentStatus + '\'' +
+                ", attendanceStatus='" + attendanceStatus + '\'' +
+                '}';
     }
 }

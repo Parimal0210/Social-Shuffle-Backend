@@ -2,54 +2,68 @@ package com.socialshuffle.model;
 
 import com.socialshuffle.converter.StringListConverter;
 import jakarta.persistence.*;
-
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "events", indexes = {
     @Index(name = "idx_event_status", columnList = "status"),
     @Index(name = "idx_event_date", columnList = "date")
 })
-public class ShuffleEvent {
+public class ShuffleEvent implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
+    @Column(name = "number")
     private int number;
+
+    @Column(name = "title")
     private String title;
 
-    @Column(length = 50)
+    @Column(name = "date", length = 50)
     private String date; // YYYY-MM-DD
 
-    @Column(length = 50)
+    @Column(name = "\"time\"", length = 50)
     private String time;
 
+    @Column(name = "venue")
     private String venue;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "address", columnDefinition = "TEXT")
     private String address;
 
+    @Column(name = "area")
     private String area;
+
+    @Column(name = "category")
     private String category;
+
+    @Column(name = "capacity")
     private int capacity;
+
+    @Column(name = "ticket_price")
     private double ticketPrice;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
     @Convert(converter = StringListConverter.class)
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "planned_games", columnDefinition = "TEXT")
     private List<String> plannedGames = new ArrayList<>();
 
-    @Column(length = 50)
+    @Column(name = "status", length = 50)
     private String status; // "upcoming", "active", "completed", "archived"
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "cover_image", columnDefinition = "TEXT")
     private String coverImage;
 
     public ShuffleEvent() {
@@ -181,5 +195,29 @@ public class ShuffleEvent {
 
     public void setCoverImage(String coverImage) {
         this.coverImage = coverImage;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ShuffleEvent that = (ShuffleEvent) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "ShuffleEvent{" +
+                "id='" + id + '\'' +
+                ", number=" + number +
+                ", title='" + title + '\'' +
+                ", date='" + date + '\'' +
+                ", status='" + status + '\'' +
+                '}';
     }
 }

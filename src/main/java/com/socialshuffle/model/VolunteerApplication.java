@@ -2,54 +2,59 @@ package com.socialshuffle.model;
 
 import com.socialshuffle.converter.StringListConverter;
 import jakarta.persistence.*;
-
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "volunteer_applications", indexes = {
     @Index(name = "idx_vol_status", columnList = "status"),
     @Index(name = "idx_vol_email", columnList = "email")
 })
-public class VolunteerApplication {
+public class VolunteerApplication implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
+    @Column(name = "name")
     private String name;
 
-    @Column(length = 150)
+    @Column(name = "email", length = 150)
     private String email;
 
-    @Column(length = 50)
+    @Column(name = "phone", length = 50)
     private String phone;
 
+    @Column(name = "area")
     private String area;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "reason", columnDefinition = "TEXT")
     private String reason;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "experience", columnDefinition = "TEXT")
     private String experience;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "skills", columnDefinition = "TEXT")
     private String skills;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "availability", columnDefinition = "TEXT")
     private String availability;
 
     @Convert(converter = StringListConverter.class)
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "preferred_responsibilities", columnDefinition = "TEXT")
     private List<String> preferredResponsibilities = new ArrayList<>();
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "additional_info", columnDefinition = "TEXT")
     private String additionalInfo;
 
-    @Column(length = 30)
+    @Column(name = "status", length = 30)
     private String status = "New"; // New, Under Review, Accepted, Rejected, On Hold
 
-    @Column(length = 50)
+    @Column(name = "submitted_at", length = 50)
     private String submittedAt;
 
     public VolunteerApplication() {
@@ -157,5 +162,28 @@ public class VolunteerApplication {
 
     public void setSubmittedAt(String submittedAt) {
         this.submittedAt = submittedAt;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        VolunteerApplication that = (VolunteerApplication) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "VolunteerApplication{" +
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", email='" + email + '\'' +
+                ", status='" + status + '\'' +
+                '}';
     }
 }

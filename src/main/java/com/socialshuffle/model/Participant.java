@@ -2,9 +2,10 @@ package com.socialshuffle.model;
 
 import com.socialshuffle.converter.StringListConverter;
 import jakarta.persistence.*;
-
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "participants", indexes = {
@@ -12,47 +13,56 @@ import java.util.List;
     @Index(name = "idx_participant_phone", columnList = "phone"),
     @Index(name = "idx_participant_area", columnList = "area")
 })
-public class Participant {
+public class Participant implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
+    @Column(name = "name")
     private String name;
 
-    @Column(unique = true, nullable = false, length = 150)
+    @Column(name = "email", unique = true, nullable = false, length = 150)
     private String email;
 
-    @Column(length = 50)
+    @Column(name = "phone", length = 50)
     private String phone;
 
+    @Column(name = "area")
     private String area;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "avatar", columnDefinition = "TEXT")
     private String avatar;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "bio", columnDefinition = "TEXT")
     private String bio;
 
-    @Column(length = 50)
+    @Column(name = "joined_date", length = 50)
     private String joinedDate;
 
+    @Column(name = "total_events_attended")
     private int totalEventsAttended;
+
+    @Column(name = "total_registrations")
     private int totalRegistrations;
 
     @Convert(converter = StringListConverter.class)
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "games_played_ids", columnDefinition = "TEXT")
     private List<String> gamesPlayedIds = new ArrayList<>();
 
     @Convert(converter = StringListConverter.class)
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "venues_visited", columnDefinition = "TEXT")
     private List<String> venuesVisited = new ArrayList<>();
 
+    @Column(name = "total_pax_brought")
     private int totalPaxBrought;
 
-    @Column(length = 64)
+    @Column(name = "last_attended_event_id", length = 64)
     private String lastAttendedEventId;
 
+    @Column(name = "last_attended_event_title")
     private String lastAttendedEventTitle;
 
     public Participant() {
@@ -185,5 +195,29 @@ public class Participant {
 
     public void setLastAttendedEventTitle(String lastAttendedEventTitle) {
         this.lastAttendedEventTitle = lastAttendedEventTitle;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Participant that = (Participant) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "Participant{" +
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", email='" + email + '\'' +
+                ", area='" + area + '\'' +
+                ", totalEventsAttended=" + totalEventsAttended +
+                '}';
     }
 }

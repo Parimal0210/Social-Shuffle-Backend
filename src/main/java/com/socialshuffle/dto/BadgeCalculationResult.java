@@ -1,9 +1,13 @@
 package com.socialshuffle.dto;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class BadgeCalculationResult {
+public class BadgeCalculationResult implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
     private int currentLevel;
     private BadgeLevelDefinition currentBadge;
     private BadgeLevelDefinition nextBadge;
@@ -15,7 +19,9 @@ public class BadgeCalculationResult {
     private LevelProgress levelProgress;
     private List<LevelStatus> levels = new ArrayList<>();
 
-    public static class LevelProgress {
+    public static class LevelProgress implements Serializable {
+        private static final long serialVersionUID = 1L;
+
         private int percentageToNextLevel;
         private int gamesNeededForNextLevel;
         private int eventsNeededForNextLevel;
@@ -54,7 +60,9 @@ public class BadgeCalculationResult {
         }
     }
 
-    public static class LevelStatus {
+    public static class LevelStatus implements Serializable {
+        private static final long serialVersionUID = 1L;
+
         private int level;
         private BadgeLevelDefinition definition;
         private boolean isUnlocked;

@@ -2,8 +2,12 @@ package com.socialshuffle.dto;
 
 import com.socialshuffle.model.Participant;
 import com.socialshuffle.model.User;
+import java.io.Serializable;
 
-public class AuthResponse {
+public class AuthResponse implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
     private String token;
     private User user;
     private Participant participant;

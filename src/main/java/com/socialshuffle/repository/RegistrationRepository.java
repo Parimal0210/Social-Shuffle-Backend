@@ -22,6 +22,8 @@ public interface RegistrationRepository extends JpaRepository<Registration, Stri
 
     List<Registration> findByEventIdAndAttendanceStatus(String eventId, String attendanceStatus);
 
+    List<Registration> findByEventIdAndAttendanceStatusIgnoreCase(String eventId, String attendanceStatus);
+
     long countByEventId(String eventId);
 
     long countByEventIdAndAttendanceStatus(String eventId, String attendanceStatus);
@@ -29,6 +31,10 @@ public interface RegistrationRepository extends JpaRepository<Registration, Stri
     Optional<Registration> findByQrCodeTokenIgnoreCase(String qrCodeToken);
 
     Optional<Registration> findByIdOrQrCodeTokenIgnoreCase(String id, String qrCodeToken);
+
+    Optional<Registration> findByTicketCodeIgnoreCase(String ticketCode);
+
+    Optional<Registration> findByIdOrTicketCodeIgnoreCase(String id, String ticketCode);
 
     @Transactional
     @Modifying

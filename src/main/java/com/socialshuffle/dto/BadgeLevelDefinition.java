@@ -1,9 +1,13 @@
 package com.socialshuffle.dto;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class BadgeLevelDefinition {
+public class BadgeLevelDefinition implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
     private int level;
     private String fancyName;
     private String shortTitle;

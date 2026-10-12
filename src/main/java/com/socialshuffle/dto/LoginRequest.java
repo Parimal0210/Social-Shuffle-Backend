@@ -1,6 +1,11 @@
 package com.socialshuffle.dto;
 
-public class LoginRequest {
+import java.io.Serializable;
+
+public class LoginRequest implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
     private String emailOrPhone;
     private String password;
 

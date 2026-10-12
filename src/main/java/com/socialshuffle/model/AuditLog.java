@@ -1,28 +1,37 @@
 package com.socialshuffle.model;
 
 import jakarta.persistence.*;
+import java.io.Serializable;
+import java.util.Objects;
 
 @Entity
 @Table(name = "audit_logs", indexes = {
-    @Index(name = "idx_audit_timestamp", columnList = "timestamp")
+    @Index(name = "idx_audit_timestamp", columnList = "\"timestamp\"")
 })
-public class AuditLog {
+public class AuditLog implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
+    @Column(name = "admin_name")
     private String adminName;
+
+    @Column(name = "action")
     private String action;
+
+    @Column(name = "target")
     private String target;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "details", columnDefinition = "TEXT")
     private String details;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(length = 50)
+    @Column(name = "\"timestamp\"", length = 50)
     private String timestamp;
 
     public AuditLog() {
@@ -95,5 +104,29 @@ public class AuditLog {
 
     public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AuditLog auditLog = (AuditLog) o;
+        return Objects.equals(id, auditLog.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "AuditLog{" +
+                "id='" + id + '\'' +
+                ", adminName='" + adminName + '\'' +
+                ", action='" + action + '\'' +
+                ", target='" + target + '\'' +
+                ", timestamp='" + timestamp + '\'' +
+                '}';
     }
 }

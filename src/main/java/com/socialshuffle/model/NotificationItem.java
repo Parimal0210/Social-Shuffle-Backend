@@ -1,30 +1,35 @@
 package com.socialshuffle.model;
 
 import jakarta.persistence.*;
+import java.io.Serializable;
+import java.util.Objects;
 
 @Entity
 @Table(name = "notifications", indexes = {
-    @Index(name = "idx_notif_timestamp", columnList = "timestamp"),
+    @Index(name = "idx_notif_timestamp", columnList = "\"timestamp\""),
     @Index(name = "idx_notif_read", columnList = "is_read")
 })
-public class NotificationItem {
+public class NotificationItem implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
+    @Column(name = "title")
     private String title;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "message", columnDefinition = "TEXT")
     private String message;
 
-    @Column(length = 50)
+    @Column(name = "type", length = 50)
     private String type; // event, registration, community, system
 
-    @Column(length = 50)
+    @Column(name = "\"timestamp\"", length = 50)
     private String timestamp;
 
-    @Column(name = "is_read")
+    @Column(name = "is_read", nullable = false)
     private boolean read = false;
 
     @Column(name = "recipient_email", length = 120)
@@ -130,5 +135,29 @@ public class NotificationItem {
 
     public void setRead(boolean read) {
         this.read = read;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        NotificationItem that = (NotificationItem) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "NotificationItem{" +
+                "id='" + id + '\'' +
+                ", title='" + title + '\'' +
+                ", type='" + type + '\'' +
+                ", timestamp='" + timestamp + '\'' +
+                ", read=" + read +
+                '}';
     }
 }

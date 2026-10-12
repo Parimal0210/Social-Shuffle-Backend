@@ -1,46 +1,56 @@
 package com.socialshuffle.model;
 
 import jakarta.persistence.*;
+import java.io.Serializable;
+import java.util.Objects;
 
 @Entity
 @Table(name = "safety_reports", indexes = {
     @Index(name = "idx_safety_status", columnList = "status"),
-    @Index(name = "idx_safety_event", columnList = "eventId")
+    @Index(name = "idx_safety_event", columnList = "event_id")
 })
-public class SafetyReport {
+public class SafetyReport implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
-    @Column(length = 64)
+    @Column(name = "event_id", length = 64)
     private String eventId;
 
+    @Column(name = "event_title")
     private String eventTitle;
 
-    @Column(length = 64)
+    @Column(name = "type", length = 64)
     private String type; // Event issue, Venue issue, Community concern, Uncomfortable interaction, Harassment, Other
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(length = 50)
+    @Column(name = "date_time", length = 50)
     private String dateTime;
 
+    @Column(name = "person_involved")
     private String personInvolved;
+
+    @Column(name = "anonymous", nullable = false)
     private boolean anonymous = false;
+
+    @Column(name = "reporter_name")
     private String reporterName;
 
-    @Column(length = 100)
+    @Column(name = "reporter_contact", length = 100)
     private String reporterContact;
 
-    @Column(length = 30)
+    @Column(name = "status", length = 30)
     private String status = "New"; // New, Investigating, Resolved
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "resolution_notes", columnDefinition = "TEXT")
     private String resolutionNotes;
 
-    @Column(length = 50)
+    @Column(name = "created_at", length = 50)
     private String createdAt;
 
     public SafetyReport() {
@@ -148,5 +158,28 @@ public class SafetyReport {
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        SafetyReport that = (SafetyReport) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "SafetyReport{" +
+                "id='" + id + '\'' +
+                ", eventId='" + eventId + '\'' +
+                ", type='" + type + '\'' +
+                ", status='" + status + '\'' +
+                '}';
     }
 }

@@ -1,44 +1,50 @@
 package com.socialshuffle.model;
 
 import jakarta.persistence.*;
+import java.io.Serializable;
+import java.util.Objects;
 
 @Entity
 @Table(name = "admins", indexes = {
-    @Index(name = "idx_admin_email", columnList = "email")
+    @Index(name = "idx_admin_email", columnList = "email"),
+    @Index(name = "idx_admin_active", columnList = "active")
 })
-public class AdminAccount {
+public class AdminAccount implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
-    @Column(nullable = false)
+    @Column(name = "name", nullable = false)
     private String name;
 
-    @Column(unique = true, nullable = false, length = 150)
+    @Column(name = "email", unique = true, nullable = false, length = 150)
     private String email;
 
-    @Column(length = 50)
+    @Column(name = "phone", length = 50)
     private String phone;
 
-    @Column(nullable = false)
+    @Column(name = "password", nullable = false)
     private String password;
 
-    @Column(length = 50)
+    @Column(name = "role", length = 50)
     private String role = "admin";
 
-    @Column(length = 100)
+    @Column(name = "designation", length = 100)
     private String designation = "Host & Community Organizer";
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "avatar", columnDefinition = "TEXT")
     private String avatar;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "bio", columnDefinition = "TEXT")
     private String bio;
 
+    @Column(name = "active", nullable = false)
     private boolean active = true;
 
-    @Column(length = 50)
+    @Column(name = "created_at", length = 50)
     private String createdAt;
 
     public AdminAccount() {
@@ -141,5 +147,29 @@ public class AdminAccount {
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AdminAccount that = (AdminAccount) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "AdminAccount{" +
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", email='" + email + '\'' +
+                ", role='" + role + '\'' +
+                ", active=" + active +
+                '}';
     }
 }

@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_participant_id ON users (participant_id);
 
 -- ------------------------------------------------------------------------------
 -- 3. Table structure for table: participants
@@ -85,13 +86,13 @@ CREATE TABLE IF NOT EXISTS events (
     number INTEGER DEFAULT 0,
     title VARCHAR(255),
     date VARCHAR(50),
-    time VARCHAR(100),
+    "time" VARCHAR(50),
     venue VARCHAR(255),
     address TEXT,
     area VARCHAR(255),
     category VARCHAR(100),
     capacity INTEGER DEFAULT 30,
-    ticket_price INTEGER DEFAULT 350,
+    ticket_price DOUBLE PRECISION DEFAULT 350.0,
     description TEXT,
     notes TEXT,
     planned_games TEXT,
@@ -101,7 +102,6 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_date ON events (date);
 CREATE INDEX IF NOT EXISTS idx_events_status ON events (status);
-CREATE INDEX IF NOT EXISTS idx_events_area ON events (area);
 
 -- ------------------------------------------------------------------------------
 -- 5. Table structure for table: games
@@ -121,11 +121,11 @@ CREATE TABLE IF NOT EXISTS games (
     rating DOUBLE PRECISION DEFAULT 4.5,
     image TEXT,
     owner VARCHAR(100),
-    available BOOLEAN DEFAULT TRUE,
-    current_location VARCHAR(255)
+    venue VARCHAR(255)
 );
 
 CREATE INDEX IF NOT EXISTS idx_games_category ON games (category);
+CREATE INDEX IF NOT EXISTS idx_games_difficulty ON games (difficulty);
 CREATE INDEX IF NOT EXISTS idx_games_active ON games (active);
 
 -- ------------------------------------------------------------------------------
@@ -142,27 +142,29 @@ CREATE TABLE IF NOT EXISTS registrations (
     participant_area VARCHAR(255),
     pax_count INTEGER DEFAULT 1,
     guests TEXT,
-    payment_status VARCHAR(50) DEFAULT 'Pending',
-    payment_method VARCHAR(50) DEFAULT 'UPI',
-    amount_paid INTEGER DEFAULT 350,
-    attendance_status VARCHAR(50) DEFAULT 'Registered',
+    payment_status VARCHAR(30) DEFAULT 'Pending',
+    attendance_status VARCHAR(30) DEFAULT 'Pending',
     check_in_time VARCHAR(50),
-    ticket_code VARCHAR(100),
     registered_at VARCHAR(50),
-    games_played_at_event TEXT,
-    feedback_rating INTEGER,
-    feedback_comments TEXT,
-    checked_in_by VARCHAR(64),
-    payment_transaction_id VARCHAR(64),
-    receipt_number VARCHAR(64),
-    cancellation_reason TEXT,
-    cancelled_at VARCHAR(50)
+    razorpay_payment_id VARCHAR(64),
+    razorpay_order_id VARCHAR(64),
+    amount_paid DOUBLE PRECISION,
+    qr_code_token VARCHAR(64),
+    qr_code_url TEXT,
+    email_sent BOOLEAN DEFAULT FALSE,
+    email_sent_at VARCHAR(50),
+    games_played TEXT,
+    ticket_code VARCHAR(64)
 );
 
-CREATE INDEX IF NOT EXISTS idx_regs_event ON registrations (event_id);
-CREATE INDEX IF NOT EXISTS idx_regs_participant ON registrations (participant_id);
-CREATE INDEX IF NOT EXISTS idx_regs_ticket_code ON registrations (ticket_code);
-CREATE INDEX IF NOT EXISTS idx_regs_payment_status ON registrations (payment_status);
+CREATE INDEX IF NOT EXISTS idx_reg_event ON registrations (event_id);
+CREATE INDEX IF NOT EXISTS idx_reg_participant ON registrations (participant_id);
+CREATE INDEX IF NOT EXISTS idx_reg_event_part ON registrations (event_id, participant_id);
+CREATE INDEX IF NOT EXISTS idx_reg_attendance ON registrations (attendance_status);
+CREATE INDEX IF NOT EXISTS idx_reg_payment ON registrations (payment_status);
+CREATE INDEX IF NOT EXISTS idx_reg_qr_token ON registrations (qr_code_token);
+CREATE INDEX IF NOT EXISTS idx_reg_ticket_code ON registrations (ticket_code);
+CREATE INDEX IF NOT EXISTS idx_reg_razorpay ON registrations (razorpay_payment_id);
 
 -- ------------------------------------------------------------------------------
 -- 7. Table structure for table: event_feedback
@@ -170,16 +172,20 @@ CREATE INDEX IF NOT EXISTS idx_regs_payment_status ON registrations (payment_sta
 CREATE TABLE IF NOT EXISTS event_feedback (
     id VARCHAR(64) PRIMARY KEY,
     event_id VARCHAR(64) NOT NULL,
-    registration_id VARCHAR(64),
+    event_title VARCHAR(255),
+    participant_id VARCHAR(64),
     participant_name VARCHAR(255),
-    rating INTEGER DEFAULT 5,
-    comments TEXT,
-    favorite_game VARCHAR(255),
+    anonymous BOOLEAN DEFAULT FALSE,
+    overall_rating INTEGER DEFAULT 5,
     venue_rating INTEGER DEFAULT 5,
-    submitted_at VARCHAR(50)
+    game_rating INTEGER DEFAULT 5,
+    host_rating INTEGER DEFAULT 5,
+    suggestions TEXT,
+    created_at VARCHAR(50)
 );
 
 CREATE INDEX IF NOT EXISTS idx_feedback_event ON event_feedback (event_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_participant ON event_feedback (participant_id);
 
 -- ------------------------------------------------------------------------------
 -- 8. Table structure for table: safety_reports
@@ -187,19 +193,21 @@ CREATE INDEX IF NOT EXISTS idx_feedback_event ON event_feedback (event_id);
 CREATE TABLE IF NOT EXISTS safety_reports (
     id VARCHAR(64) PRIMARY KEY,
     event_id VARCHAR(64),
-    reporter_name VARCHAR(255),
-    reporter_contact VARCHAR(64),
-    reported_participant VARCHAR(255),
-    incident_category VARCHAR(100),
+    event_title VARCHAR(255),
+    type VARCHAR(64),
     description TEXT,
-    severity VARCHAR(50),
-    status VARCHAR(50) DEFAULT 'Investigating',
+    date_time VARCHAR(50),
+    person_involved VARCHAR(255),
+    anonymous BOOLEAN DEFAULT FALSE,
+    reporter_name VARCHAR(255),
+    reporter_contact VARCHAR(100),
+    status VARCHAR(30) DEFAULT 'New',
     resolution_notes TEXT,
     created_at VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_reports_event ON safety_reports (event_id);
-CREATE INDEX IF NOT EXISTS idx_reports_status ON safety_reports (status);
+CREATE INDEX IF NOT EXISTS idx_safety_status ON safety_reports (status);
+CREATE INDEX IF NOT EXISTS idx_safety_event ON safety_reports (event_id);
 
 -- ------------------------------------------------------------------------------
 -- 9. Table structure for table: volunteer_applications
@@ -207,20 +215,21 @@ CREATE INDEX IF NOT EXISTS idx_reports_status ON safety_reports (status);
 CREATE TABLE IF NOT EXISTS volunteer_applications (
     id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255),
-    phone VARCHAR(50),
     email VARCHAR(150),
-    area VARCHAR(100),
+    phone VARCHAR(50),
+    area VARCHAR(255),
+    reason TEXT,
     experience TEXT,
-    preferred_games TEXT,
-    availability TEXT,
-    motivation TEXT,
     skills TEXT,
-    status VARCHAR(50) DEFAULT 'Pending',
+    availability TEXT,
+    preferred_responsibilities TEXT,
+    additional_info TEXT,
+    status VARCHAR(30) DEFAULT 'New',
     submitted_at VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_volunteers_email ON volunteer_applications (email);
-CREATE INDEX IF NOT EXISTS idx_volunteers_status ON volunteer_applications (status);
+CREATE INDEX IF NOT EXISTS idx_vol_status ON volunteer_applications (status);
+CREATE INDEX IF NOT EXISTS idx_vol_email ON volunteer_applications (email);
 
 -- ------------------------------------------------------------------------------
 -- 10. Table structure for table: audit_logs
@@ -232,10 +241,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     target VARCHAR(255),
     details TEXT,
     description TEXT,
-    timestamp VARCHAR(50)
+    "timestamp" VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs (timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs ("timestamp");
 
 -- ------------------------------------------------------------------------------
 -- 11. Table structure for table: notifications
@@ -245,15 +254,15 @@ CREATE TABLE IF NOT EXISTS notifications (
     title VARCHAR(255),
     message TEXT,
     type VARCHAR(50),
-    timestamp VARCHAR(50),
+    "timestamp" VARCHAR(50),
     is_read BOOLEAN DEFAULT FALSE,
     recipient_email VARCHAR(120),
     event_id VARCHAR(64),
-    delivery_status VARCHAR(32)
+    delivery_status VARCHAR(32) DEFAULT 'Sent'
 );
 
-CREATE INDEX IF NOT EXISTS idx_notif_time ON notifications (timestamp);
-CREATE INDEX IF NOT EXISTS idx_notif_recipient ON notifications (recipient_email);
+CREATE INDEX IF NOT EXISTS idx_notif_timestamp ON notifications ("timestamp");
+CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications (is_read);
 
 -- ==============================================================================
 -- INITIAL SEED DATA (PostgreSQL Safe with ON CONFLICT DO NOTHING)
@@ -402,7 +411,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- 4. Seed `events`
-INSERT INTO events (id, number, title, date, time, venue, address, area, category, capacity, ticket_price, description, notes, planned_games, status, cover_image)
+INSERT INTO events (id, number, title, date, "time", venue, address, area, category, capacity, ticket_price, description, notes, planned_games, status, cover_image)
 VALUES
 (
     'evt-35',
@@ -415,7 +424,7 @@ VALUES
     'Koregaon Park',
     'Casual & Social',
     30,
-    350,
+    350.0,
     'Join us for our signature weekend board gaming mixer! Over 40+ curated board games, warm coffee, and friendly table hosts to teach you the rules in under 5 minutes.',
     'Wear comfortable clothing. Welcome tea/coffee included with your registration ticket.',
     '["g-catan","g-avalon","g-codenames","g-splendor"]',
@@ -433,7 +442,7 @@ VALUES
     'Baner',
     'Tournament',
     32,
-    400,
+    400.0,
     'A tactical showdown featuring Catan, 7 Wonders, and Wingspan with special prizes and handcrafted coffee.',
     'Pre-registration mandatory. Tables limited to 32 players.',
     '["g-catan","g-splendor","g-7wonders"]',
@@ -443,7 +452,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- 5. Seed `games`
-INSERT INTO games (id, name, category, difficulty, players, duration, description, active, plays_count, tags, rating, image, owner, available, current_location)
+INSERT INTO games (id, name, category, difficulty, players, duration, description, active, plays_count, tags, rating, image, owner, venue)
 VALUES
 (
     'g-catan',
@@ -459,8 +468,7 @@ VALUES
     4.8,
     'https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?auto=format&fit=crop&q=80&w=400',
     'Community Library',
-    TRUE,
-    'Koregaon Park Box'
+    'The Rustle Nest Cafe'
 ),
 (
     'g-avalon',
@@ -476,8 +484,7 @@ VALUES
     4.9,
     'https://images.unsplash.com/photo-1543083477-4f785aeafaa9?auto=format&fit=crop&q=80&w=400',
     'Community Library',
-    TRUE,
-    'Koregaon Park Box'
+    'The Rustle Nest Cafe'
 ),
 (
     'g-codenames',
@@ -493,8 +500,7 @@ VALUES
     4.8,
     'https://images.unsplash.com/photo-1563941402622-4e7a488bcc57?auto=format&fit=crop&q=80&w=400',
     'Community Library',
-    TRUE,
-    'Baner Box'
+    'Pagdandi Bookstore Cafe'
 ),
 (
     'g-splendor',
@@ -510,13 +516,12 @@ VALUES
     4.7,
     'https://images.unsplash.com/photo-1585504198199-20277593b94f?auto=format&fit=crop&q=80&w=400',
     'Community Library',
-    TRUE,
-    'Baner Box'
+    'Pagdandi Bookstore Cafe'
 )
 ON CONFLICT (id) DO NOTHING;
 
 -- 6. Seed `registrations`
-INSERT INTO registrations (id, event_id, participant_id, participant_name, participant_email, participant_phone, participant_area, pax_count, guests, payment_status, attendance_status, check_in_time, registered_at)
+INSERT INTO registrations (id, event_id, participant_id, participant_name, participant_email, participant_phone, participant_area, pax_count, guests, payment_status, attendance_status, check_in_time, registered_at, ticket_code)
 VALUES
 (
     'reg-1',
@@ -531,12 +536,13 @@ VALUES
     'Confirmed',
     'Registered',
     NULL,
-    '2026-09-20T10:30:00Z'
+    '2026-09-20T10:30:00Z',
+    'TC-EVT35-ROHAN'
 )
 ON CONFLICT (id) DO NOTHING;
 
 -- 7. Seed `audit_logs`
-INSERT INTO audit_logs (id, admin_name, action, target, details, description, timestamp)
+INSERT INTO audit_logs (id, admin_name, action, target, details, description, "timestamp")
 VALUES
 (
     'log-1',
@@ -550,7 +556,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- 8. Seed `notifications`
-INSERT INTO notifications (id, title, message, type, timestamp, is_read, recipient_email)
+INSERT INTO notifications (id, title, message, type, "timestamp", is_read, recipient_email)
 VALUES
 (
     'notif-1',

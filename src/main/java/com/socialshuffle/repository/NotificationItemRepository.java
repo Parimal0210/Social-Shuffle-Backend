@@ -15,5 +15,7 @@ public interface NotificationItemRepository extends JpaRepository<NotificationIt
 
     List<NotificationItem> findByRecipientEmailOrderByTimestampDesc(String recipientEmail);
 
+    List<NotificationItem> findByRecipientEmailIgnoreCaseOrderByTimestampDesc(String recipientEmail);
+
     List<NotificationItem> findByEventIdOrderByTimestampDesc(String eventId);
 }

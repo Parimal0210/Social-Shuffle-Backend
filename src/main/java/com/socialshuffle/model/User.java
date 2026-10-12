@@ -1,55 +1,62 @@
 package com.socialshuffle.model;
 
 import jakarta.persistence.*;
+import java.io.Serializable;
 import java.time.Instant;
+import java.util.Objects;
 
 @Entity
 @Table(name = "users", indexes = {
     @Index(name = "idx_user_email", columnList = "email"),
     @Index(name = "idx_user_phone", columnList = "phone"),
     @Index(name = "idx_user_role", columnList = "role"),
-    @Index(name = "idx_user_part_id", columnList = "participantId")
+    @Index(name = "idx_user_part_id", columnList = "participant_id")
 })
-public class User {
+public class User implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
-    @Column(length = 64)
+    @Column(name = "id", length = 64)
     private String id;
 
+    @Column(name = "name")
     private String name;
 
-    @Column(unique = true, nullable = false, length = 150)
+    @Column(name = "email", unique = true, nullable = false, length = 150)
     private String email;
 
-    @Column(length = 50)
+    @Column(name = "phone", length = 50)
     private String phone;
 
+    @Column(name = "password")
     private String password;
 
-    @Column(length = 30)
+    @Column(name = "role", length = 30)
     private String role; // "participant" or "admin"
 
+    @Column(name = "area")
     private String area;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "avatar", columnDefinition = "TEXT")
     private String avatar;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "bio", columnDefinition = "TEXT")
     private String bio;
 
-    @Column(length = 64)
+    @Column(name = "participant_id", length = 64)
     private String participantId;
 
-    @Column(length = 30)
+    @Column(name = "auth_provider", length = 30)
     private String authProvider = "local";
 
-    @Column(length = 50)
+    @Column(name = "last_active_at", length = 50)
     private String lastActiveAt = Instant.now().toString();
 
-    @Column(length = 50)
+    @Column(name = "login_at", length = 50)
     private String loginAt = Instant.now().toString();
 
-    @Column(length = 50)
+    @Column(name = "created_at", length = 50)
     private String createdAt = Instant.now().toString();
 
     public User() {
@@ -175,5 +182,29 @@ public class User {
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        User user = (User) o;
+        return Objects.equals(id, user.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "User{" +
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", email='" + email + '\'' +
+                ", role='" + role + '\'' +
+                ", area='" + area + '\'' +
+                '}';
     }
 }
