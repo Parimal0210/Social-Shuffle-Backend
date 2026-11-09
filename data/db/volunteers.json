@@ -1,0 +1,19 @@
+[
+  {
+    "id": "vol-1",
+    "name": "Sneha Patil",
+    "email": "sneha.patil@example.com",
+    "phone": "+91 97665 11223",
+    "area": "Aundh",
+    "reason": "Love fostering board game communities in Pune.",
+    "experience": "Played over 80+ tabletop games. Happy to teach Azul, Cascadia, and Wingspan.",
+    "skills": "Quick game teacher, welcoming host",
+    "availability": "Weekend evenings",
+    "preferredResponsibilities": [
+      "Game Explainer / Rules Teacher",
+      "Welcome Desk"
+    ],
+    "status": "Accepted",
+    "submittedAt": "2024-10-01T14:00:00Z"
+  }
+]

@@ -3,221 +3,151 @@ package com.socialshuffle.service;
 import com.socialshuffle.dto.BadgeCalculationRequest;
 import com.socialshuffle.dto.BadgeCalculationResult;
 import com.socialshuffle.dto.BadgeLevelDefinition;
+import com.socialshuffle.model.BadgeLevel;
 import com.socialshuffle.model.Participant;
+import com.socialshuffle.repository.BadgeLevelRepository;
 import com.socialshuffle.repository.GameRepository;
 import com.socialshuffle.repository.ParticipantRepository;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
+/**
+ * Service for calculating and managing participant badge levels.
+ * All badge definitions are fetched strictly from the database table `badge_levels`.
+ */
 @Service
 public class BadgeService {
 
     private final ParticipantRepository participantRepository;
     private final GameRepository gameRepository;
+    private final BadgeLevelRepository badgeLevelRepository;
 
-    private static final List<BadgeLevelDefinition> BADGE_LEVELS = new ArrayList<>();
-
-    static {
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                1,
-                "Novice Roller",
-                "Initiate of the Ivory Dice",
-                "The First Move",
-                "Broke the ice, rolled the initial dice, and attended their first Pune tabletop gathering.",
-                "🎲",
-                4, // 1 game of 24
-                1,
-                "Common",
-                "from-slate-800 via-purple-950/40 to-slate-900",
-                "border-slate-600/50",
-                "text-slate-300",
-                "bg-slate-700/50 text-slate-300 border-slate-600",
-                "shadow-slate-500/10",
-                Arrays.asList("Unlock Digital Shuffler Passport", "Table Rookie Profile Badge")
-        ));
-
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                2,
-                "Apprentice Shuffler",
-                "Acolyte of the Meeple Order",
-                "Table Apprentice",
-                "Expanded beyond the basics with multiple games tested and a verified event check-in.",
-                "♟️",
-                10,
-                1,
-                "Common",
-                "from-amber-950/30 via-slate-900 to-purple-950/30",
-                "border-amber-700/50",
-                "text-amber-300",
-                "bg-amber-900/30 text-amber-300 border-amber-700/50",
-                "shadow-amber-700/15",
-                Arrays.asList("Game Table Tagging Rights", "Access to Sunday Game Discussions")
-        ));
-
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                3,
-                "Casual Tactician",
-                "Bronze Vanguard of Koregaon",
-                "Cafe Contender",
-                "Frequents Pune board game cafes and demonstrates reliable tabletop instincts.",
-                "⚔️",
-                20,
-                2,
-                "Uncommon",
-                "from-amber-800/30 via-slate-900 to-amber-950/40",
-                "border-amber-600/60",
-                "text-amber-200",
-                "bg-amber-600/20 text-amber-200 border-amber-500/40",
-                "shadow-amber-500/20",
-                Arrays.asList("Early Seat Reservations", "Bronze Shuffler Tier Status")
-        ));
-
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                4,
-                "Board Game Enthusiast",
-                "Master of the Card & Tile",
-                "Strategy Adept",
-                "Explores nearly a third of the catalog with a strong grasp of tile placement and card play.",
-                "🏰",
-                30,
-                2,
-                "Uncommon",
-                "from-blue-950/40 via-slate-900 to-indigo-950/40",
-                "border-blue-500/60",
-                "text-blue-300",
-                "bg-blue-500/20 text-blue-300 border-blue-400/40",
-                "shadow-blue-500/25",
-                Arrays.asList("Custom Table Name Tag", "Host Co-Player Recommendation")
-        ));
-
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                5,
-                "Tabletop Strategist",
-                "Silver Viceroy of Baner Tables",
-                "Tabletop Champion",
-                "Comfortably maneuvers euro-style resource management, engine building, and deduction games.",
-                "🛡️",
-                40,
-                3,
-                "Rare",
-                "from-slate-700/40 via-indigo-950/50 to-slate-900",
-                "border-slate-300/60",
-                "text-slate-100",
-                "bg-slate-200/20 text-slate-100 border-slate-300/50",
-                "shadow-slate-300/25",
-                Arrays.asList("Silver Shuffler Tier Status", "Tournament Seeding Priority")
-        ));
-
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                6,
-                "Seasoned Shuffler",
-                "Commander of a Thousand Battles",
-                "Halfway to Catalog Mastery (50%+)",
-                "Conquered half the official game library and a loyal regular at weekend gatherings.",
-                "🌟",
-                50,
-                4,
-                "Rare",
-                "from-cyan-950/50 via-teal-950/40 to-slate-900",
-                "border-cyan-400/70",
-                "text-cyan-200",
-                "bg-cyan-500/20 text-cyan-200 border-cyan-400/50",
-                "shadow-cyan-400/30",
-                Arrays.asList("New Game Library Voting Voice", "Exclusive Shuffler Community Role")
-        ));
-
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                7,
-                "Master of Meeples",
-                "Gold Sovereign of Strategy",
-                "High Tactician (60%+)",
-                "Commanding table presence with extensive knowledge across strategic and party classics.",
-                "👑",
-                60,
-                5,
-                "Epic",
-                "from-amber-600/30 via-yellow-600/20 to-purple-950/50",
-                "border-amber-400/80",
-                "text-amber-200",
-                "bg-amber-400/20 text-amber-200 border-amber-400/50",
-                "shadow-amber-400/35",
-                Arrays.asList("Gold Strategist Tier Status", "Complimentary Table Host Drink")
-        ));
-
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                8,
-                "Grandmaster Tactician",
-                "Platinum Grand Marshal",
-                "Tabletop Virtuoso (70%+)",
-                "Demonstrates surgical precision in deep euro-games, complex negotiations, and heavy card systems.",
-                "💎",
-                70,
-                6,
-                "Epic",
-                "from-indigo-600/30 via-purple-600/20 to-sky-950/50",
-                "border-indigo-400/80",
-                "text-indigo-200",
-                "bg-indigo-400/20 text-indigo-200 border-indigo-400/50",
-                "shadow-indigo-400/40",
-                Arrays.asList("VIP Game Day Lounge Pass", "Rule Explainer Recognition")
-        ));
-
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                9,
-                "Tabletop Sovereign",
-                "Diamond Regent of Tabletop Realms",
-                "Pune Board Game Legend (80%+)",
-                "A legendary pillar of Pune gaming who has conquered 80%+ of all curated board games.",
-                "🌌",
-                80,
-                7,
-                "Legendary",
-                "from-purple-600/40 via-pink-600/30 to-amber-900/40",
-                "border-purple-300",
-                "text-purple-100",
-                "bg-purple-500/30 text-purple-100 border-purple-300/60",
-                "shadow-purple-400/50",
-                Arrays.asList("Diamond Grandmaster Tier Status", "Permanent Hall of Fame Listing", "Private Table Reservation")
-        ));
-
-        BADGE_LEVELS.add(new BadgeLevelDefinition(
-                10,
-                "Apex Shuffler",
-                "Mythic Tabletop Archon",
-                "90%+ Catalog Mastery & Elite Veteran",
-                "Supreme mastery of 90%+ games in Pune meetups. An immortal legend of Social Shuffle.",
-                "⚡",
-                90,
-                8,
-                "Mythic",
-                "from-amber-400/40 via-purple-600/40 to-cyan-400/40",
-                "border-amber-300",
-                "text-amber-100",
-                "bg-gradient-to-r from-amber-400/30 to-purple-400/30 text-amber-200 border-amber-300/70",
-                "shadow-amber-400/60",
-                Arrays.asList(
-                        "Mythic Golden Avatar Crown",
-                        "Free VIP Entry to Annual Championship",
-                        "Name Etched onto Social Shuffle Trophy",
-                        "Lifetime Pune Shuffler Pioneer Status"
-                )
-        ));
-    }
-
-    public BadgeService(ParticipantRepository participantRepository, GameRepository gameRepository) {
+    public BadgeService(ParticipantRepository participantRepository,
+                        GameRepository gameRepository,
+                        BadgeLevelRepository badgeLevelRepository) {
         this.participantRepository = participantRepository;
         this.gameRepository = gameRepository;
+        this.badgeLevelRepository = badgeLevelRepository;
     }
 
+    /**
+     * Seeds default badge levels into the database if the badge_levels table is empty on startup.
+     */
+    @PostConstruct
+    @Transactional
+    public void initBadgeLevelsIfEmpty() {
+        if (badgeLevelRepository.count() == 0) {
+            List<BadgeLevel> seeds = Arrays.asList(
+                    new BadgeLevel(1, "Novice Roller", "Initiate of the Ivory Dice", "The First Move",
+                            "Broke the ice, rolled the initial dice, and attended their first Pune tabletop gathering.",
+                            "🎲", 4, 1, "Common", "from-slate-800 via-purple-950/40 to-slate-900",
+                            "border-slate-600/50", "text-slate-300", "bg-slate-700/50 text-slate-300 border-slate-600",
+                            "shadow-slate-500/10", Arrays.asList("Unlock Digital Shuffler Passport", "Table Rookie Profile Badge")),
+
+                    new BadgeLevel(2, "Apprentice Shuffler", "Acolyte of the Meeple Order", "Table Apprentice",
+                            "Expanded beyond the basics with multiple games tested and a verified event check-in.",
+                            "♟️", 10, 1, "Common", "from-amber-950/30 via-slate-900 to-purple-950/30",
+                            "border-amber-700/50", "text-amber-300", "bg-amber-900/30 text-amber-300 border-amber-700/50",
+                            "shadow-amber-700/15", Arrays.asList("Game Table Tagging Rights", "Access to Sunday Game Discussions")),
+
+                    new BadgeLevel(3, "Casual Tactician", "Bronze Vanguard of Koregaon", "Cafe Contender",
+                            "Frequents Pune board game cafes and demonstrates reliable tabletop instincts.",
+                            "⚔️", 20, 2, "Uncommon", "from-amber-800/30 via-slate-900 to-amber-950/40",
+                            "border-amber-600/60", "text-amber-200", "bg-amber-600/20 text-amber-200 border-amber-500/40",
+                            "shadow-amber-500/20", Arrays.asList("Early Seat Reservations", "Bronze Shuffler Tier Status")),
+
+                    new BadgeLevel(4, "Board Game Enthusiast", "Master of the Card & Tile", "Strategy Adept",
+                            "Explores nearly a third of the catalog with a strong grasp of tile placement and card play.",
+                            "🏰", 30, 2, "Uncommon", "from-blue-950/40 via-slate-900 to-indigo-950/40",
+                            "border-blue-500/60", "text-blue-300", "bg-blue-500/20 text-blue-300 border-blue-400/40",
+                            "shadow-blue-500/25", Arrays.asList("Custom Table Name Tag", "Host Co-Player Recommendation")),
+
+                    new BadgeLevel(5, "Tabletop Strategist", "Silver Viceroy of Baner Tables", "Tabletop Champion",
+                            "Comfortably maneuvers euro-style resource management, engine building, and deduction games.",
+                            "🛡️", 40, 3, "Rare", "from-slate-700/40 via-indigo-950/50 to-slate-900",
+                            "border-slate-300/60", "text-slate-100", "bg-slate-200/20 text-slate-100 border-slate-300/50",
+                            "shadow-slate-300/25", Arrays.asList("Silver Shuffler Tier Status", "Tournament Seeding Priority")),
+
+                    new BadgeLevel(6, "Seasoned Shuffler", "Commander of a Thousand Battles", "Halfway to Catalog Mastery (50%+)",
+                            "Conquered half the official game library and a loyal regular at weekend gatherings.",
+                            "🌟", 50, 4, "Rare", "from-cyan-950/50 via-teal-950/40 to-slate-900",
+                            "border-cyan-400/70", "text-cyan-200", "bg-cyan-500/20 text-cyan-200 border-cyan-400/50",
+                            "shadow-cyan-400/30", Arrays.asList("New Game Library Voting Voice", "Exclusive Shuffler Community Role")),
+
+                    new BadgeLevel(7, "Master of Meeples", "Gold Sovereign of Strategy", "High Tactician (60%+)",
+                            "Commanding table presence with extensive knowledge across strategic and party classics.",
+                            "👑", 60, 5, "Epic", "from-amber-600/30 via-yellow-600/20 to-purple-950/50",
+                            "border-amber-400/80", "text-amber-200", "bg-amber-400/20 text-amber-200 border-amber-400/50",
+                            "shadow-amber-400/35", Arrays.asList("Gold Strategist Tier Status", "Complimentary Table Host Drink")),
+
+                    new BadgeLevel(8, "Grandmaster Tactician", "Platinum Grand Marshal", "Tabletop Virtuoso (70%+)",
+                            "Demonstrates surgical precision in deep euro-games, complex negotiations, and heavy card systems.",
+                            "💎", 70, 6, "Epic", "from-indigo-600/30 via-purple-600/20 to-sky-950/50",
+                            "border-indigo-400/80", "text-indigo-200", "bg-indigo-400/20 text-indigo-200 border-indigo-400/50",
+                            "shadow-indigo-400/40", Arrays.asList("VIP Game Day Lounge Pass", "Rule Explainer Recognition")),
+
+                    new BadgeLevel(9, "Tabletop Sovereign", "Diamond Regent of Tabletop Realms", "Pune Board Game Legend (80%+)",
+                            "A legendary pillar of Pune gaming who has conquered 80%+ of all curated board games.",
+                            "🌌", 80, 7, "Legendary", "from-purple-600/40 via-pink-600/30 to-amber-900/40",
+                            "border-purple-300", "text-purple-100", "bg-purple-500/30 text-purple-100 border-purple-300/60",
+                            "shadow-purple-400/50", Arrays.asList("Diamond Grandmaster Tier Status", "Permanent Hall of Fame Listing", "Private Table Reservation")),
+
+                    new BadgeLevel(10, "Apex Shuffler", "Mythic Tabletop Archon", "90%+ Catalog Mastery & Elite Veteran",
+                            "Supreme mastery of 90%+ games in Pune meetups. An immortal legend of Social Shuffle.",
+                            "⚡", 90, 8, "Mythic", "from-amber-400/40 via-purple-600/40 to-cyan-400/40",
+                            "border-amber-300", "text-amber-100", "bg-gradient-to-r from-amber-400/30 to-purple-400/30 text-amber-200 border-amber-300/70",
+                            "shadow-amber-400/60", Arrays.asList(
+                                    "Mythic Golden Avatar Crown",
+                                    "Free VIP Entry to Annual Championship",
+                                    "Name Etched onto Social Shuffle Trophy",
+                                    "Lifetime Pune Shuffler Pioneer Status"
+                            ))
+            );
+            badgeLevelRepository.saveAll(seeds);
+        }
+    }
+
+    /**
+     * Retrieves all badge level definitions directly from database table `badge_levels`.
+     */
     public List<BadgeLevelDefinition> getAllLevels() {
-        return Collections.unmodifiableList(BADGE_LEVELS);
+        List<BadgeLevel> entities = badgeLevelRepository.findAllByOrderByLevelAsc();
+        if (entities.isEmpty()) {
+            initBadgeLevelsIfEmpty();
+            entities = badgeLevelRepository.findAllByOrderByLevelAsc();
+        }
+        return entities.stream().map(this::toDto).collect(Collectors.toList());
+    }
+
+    private BadgeLevelDefinition toDto(BadgeLevel entity) {
+        return new BadgeLevelDefinition(
+                entity.getLevel(),
+                entity.getShortTitle(),
+                entity.getFancyName(),
+                entity.getSubtitle(),
+                entity.getDescription(),
+                entity.getIcon(),
+                entity.getMinGamePercentage(),
+                entity.getMinEventsAttended(),
+                entity.getRarity(),
+                entity.getGradient(),
+                entity.getBorderColor(),
+                entity.getTextColor(),
+                entity.getBadgeTagColor(),
+                entity.getGlowEffect(),
+                entity.getPerks()
+        );
     }
 
     public BadgeCalculationResult calculateBadgeLevel(BadgeCalculationRequest request) {
+        List<BadgeLevelDefinition> badgeLevels = getAllLevels();
+
         int gamesPlayed = Math.max(0, request.getGamesPlayedCount());
         int totalGames = request.getTotalGamesCount() > 0 ? request.getTotalGamesCount() : 24;
         int eventsAttended = Math.max(0, request.getEventsAttendedCount());
@@ -227,8 +157,8 @@ public class BadgeService {
         // Evaluate earned level from Level 10 down to 1
         int earnedLevel = 0;
 
-        for (int i = BADGE_LEVELS.size() - 1; i >= 0; i--) {
-            BadgeLevelDefinition def = BADGE_LEVELS.get(i);
+        for (int i = badgeLevels.size() - 1; i >= 0; i--) {
+            BadgeLevelDefinition def = badgeLevels.get(i);
 
             // Special rule: 90%+ games played awards Level 10
             if (def.getLevel() == 10 && gamePercentage >= 90) {
@@ -254,15 +184,17 @@ public class BadgeService {
         }
 
         int currentLevelIdx = Math.max(0, earnedLevel - 1);
-        BadgeLevelDefinition currentBadge = earnedLevel > 0 ? BADGE_LEVELS.get(currentLevelIdx) : BADGE_LEVELS.get(0);
-        BadgeLevelDefinition nextBadge = earnedLevel < 10 ? BADGE_LEVELS.get(earnedLevel) : null;
+        BadgeLevelDefinition currentBadge = earnedLevel > 0 && currentLevelIdx < badgeLevels.size()
+                ? badgeLevels.get(currentLevelIdx)
+                : (badgeLevels.isEmpty() ? null : badgeLevels.get(0));
+        BadgeLevelDefinition nextBadge = earnedLevel < badgeLevels.size() ? badgeLevels.get(earnedLevel) : null;
 
         // Progress toward next level
         int percentageToNext = 100;
         int gamesNeeded = 0;
         int eventsNeeded = 0;
 
-        if (nextBadge != null) {
+        if (nextBadge != null && currentBadge != null) {
             int targetGames = (int) Math.ceil((nextBadge.getMinGamePercentage() / 100.0) * totalGames);
             gamesNeeded = Math.max(0, targetGames - gamesPlayed);
             eventsNeeded = Math.max(0, nextBadge.getMinEventsAttended() - eventsAttended);
@@ -274,7 +206,7 @@ public class BadgeService {
         }
 
         List<BadgeCalculationResult.LevelStatus> levelsList = new ArrayList<>();
-        for (BadgeLevelDefinition def : BADGE_LEVELS) {
+        for (BadgeLevelDefinition def : badgeLevels) {
             int targetGames = (int) Math.ceil((def.getMinGamePercentage() / 100.0) * totalGames);
             int gameProg = Math.min(100, Math.round(((float) gamesPlayed / Math.max(1, targetGames)) * 100));
             int eventProg = Math.min(100, Math.round(((float) eventsAttended / Math.max(1, def.getMinEventsAttended())) * 100));

@@ -52,7 +52,7 @@ if [ -z "$PAT" ]; then
   echo "  ./push_to_github.sh"
   echo ""
   echo "Option 3: Save to a local token file (auto git-ignored):"
-  echo "  echo 'your_github_token' > backend-spring-boot-mongodb/.github_token"
+  echo "  echo 'your_github_token' > Social-Shuffle-Backend/.github_token"
   echo "  ./push_to_github.sh"
   echo "----------------------------------------------------------"
   exit 1

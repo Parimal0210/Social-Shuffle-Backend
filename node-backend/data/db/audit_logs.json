@@ -1,0 +1,18 @@
+[
+  {
+    "id": "log-1",
+    "timestamp": "2024-11-01T09:00:00Z",
+    "adminName": "Parimal Shete",
+    "action": "Created Event",
+    "target": "Social Shuffle #4 - The Grand Tabletop Gala",
+    "details": "Published event with 65 capacity and Rs. 400 ticket price."
+  },
+  {
+    "id": "log-2",
+    "timestamp": "2024-11-01T09:30:00Z",
+    "adminName": "Parimal Shete",
+    "action": "Added Game to Catalog",
+    "target": "Harmonies",
+    "details": "Added Libellud 2024 release Harmonies with Medium difficulty."
+  }
+]

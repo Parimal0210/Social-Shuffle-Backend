@@ -78,18 +78,6 @@ public class DataSeeder implements CommandLineRunner {
             User admin = new User("u-admin", "Aman Joshi (Host)", "admin@socialshuffle.com", "+91 98220 11223", adminHash, "admin", "Pune");
             admin.setBio("Community Lead & Founder");
             userRepository.save(admin);
-
-            String userHash = passwordSecurityUtil.hashPassword("shuffler123");
-
-            User p1 = new User("u-rohan", "Rohan Kulkarni", "rohan.kulkarni@example.com", "+91 98220 12345", userHash, "participant", "Koregaon Park");
-            p1.setParticipantId("p-rahul");
-            p1.setBio("Board game lover, strategy nerd, Catan enthusiast.");
-            userRepository.save(p1);
-
-            User p2 = new User("u-ananya", "Ananya Deshmukh", "ananya.d@example.com", "+91 97654 32100", userHash, "participant", "Baner");
-            p2.setParticipantId("p-ananya");
-            p2.setBio("Casual gamer & Azul fan. Love meeting new people in Pune!");
-            userRepository.save(p2);
         }
     }
 
@@ -161,42 +149,11 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedParticipants() {
-        if (participantRepository.count() == 0) {
-            Participant p1 = new Participant("p-rahul", "Rohan Kulkarni", "rohan.kulkarni@example.com", "+91 98220 12345", "Koregaon Park");
-            p1.setBio("Board game lover, strategy nerd, Catan enthusiast.");
-            p1.setTotalEventsAttended(8);
-            p1.setTotalRegistrations(9);
-            p1.setJoinedDate("2026-03-12");
-
-            Participant p2 = new Participant("p-ananya", "Ananya Deshmukh", "ananya.d@example.com", "+91 97654 32100", "Baner");
-            p2.setBio("Casual gamer & Azul fan. Love meeting new people in Pune!");
-            p2.setTotalEventsAttended(5);
-            p2.setTotalRegistrations(6);
-            p2.setJoinedDate("2026-04-05");
-
-            Participant p3 = new Participant("p-sid", "Siddharth Mehta", "siddharth.m@example.com", "+91 98901 23456", "Viman Nagar");
-            p3.setBio("Heavy eurogame enthusiast. Ark Nova and Terraforming Mars!");
-            p3.setTotalEventsAttended(12);
-            p3.setTotalRegistrations(13);
-            p3.setJoinedDate("2026-01-20");
-
-            participantRepository.saveAll(Arrays.asList(p1, p2, p3));
-        }
+        // Clean initial state: Active participant records are generated through live user registration
     }
 
     private void seedRegistrations() {
-        if (registrationRepository.count() == 0) {
-            Registration r1 = new Registration("r-101", "evt-35", "p-rahul", "Rohan Kulkarni", "rohan.kulkarni@example.com", "+91 98220 12345", 1, "Paid", "UPI", 350.0, "Registered", "2026-09-22 14:30");
-            r1.setTicketCode("SHUFFLE-35-RK01");
-
-            Registration r2 = new Registration("r-102", "evt-35", "p-ananya", "Ananya Deshmukh", "ananya.d@example.com", "+91 97654 32100", 2, "Paid", "Razorpay", 700.0, "Registered", "2026-09-23 11:15");
-            r2.setTicketCode("SHUFFLE-35-AD02");
-
-            Registration r3 = new Registration("r-103", "evt-34", "p-sid", "Siddharth Mehta", "siddharth.m@example.com", "+91 98901 23456", 1, "Paid", "UPI", 350.0, "Checked In", "2026-09-18 19:40");
-            r3.setTicketCode("SHUFFLE-34-SM01");
-
-            registrationRepository.saveAll(Arrays.asList(r1, r2, r3));
-        }
+        // Clean initial state: Registrations are created via live checkout and booking
     }
 
     private void seedAuditAndNotifications() {

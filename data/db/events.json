@@ -1,0 +1,99 @@
+[
+  {
+    "id": "ev-35",
+    "number": 35,
+    "title": "Social Shuffle #35 — Weekend Board Game Bash",
+    "date": "2026-09-27",
+    "time": "Sunday, 4:00 PM – 7:30 PM",
+    "venue": "The Daily All Day",
+    "address": "Lane 7, Koregaon Park, Pune",
+    "area": "Koregaon Park",
+    "category": "Regular Community Meetup",
+    "capacity": 65,
+    "ticketPrice": 350,
+    "description": "Our 35th milestone edition! Join 60+ shufflers for Sunday afternoon board games, drinks, great bites, and curated game tables with dedicated hosts.",
+    "notes": "Free welcome drink included. Host explanations at 4:15 PM and 5:30 PM. Beginners warmly welcomed!",
+    "plannedGames": [
+      "g-codenames",
+      "g-catan",
+      "g-coup",
+      "g-flip7",
+      "g-avalon",
+      "g-justone",
+      "g-azul",
+      "g-klask"
+    ],
+    "status": "upcoming"
+  },
+  {
+    "id": "ev-36",
+    "number": 36,
+    "title": "Social Shuffle #36 — Strategy & Social Deduction Night",
+    "date": "2026-10-04",
+    "time": "Sunday, 5:00 PM – 9:00 PM",
+    "venue": "FC Road Social",
+    "address": "FC Road, Near Fergusson College, Pune",
+    "area": "FC Road",
+    "category": "Themed Game Night",
+    "capacity": 75,
+    "ticketPrice": 400,
+    "description": "Deep deception and cunning strategy! Featuring full tables for Secret Hitler, Blood on the Clocktower, Dune Imperium, and Flip 7 tournament.",
+    "notes": "Please arrive by 4:45 PM for seat assignment. High-energy event!",
+    "plannedGames": [
+      "g-secrethitler",
+      "g-bloodontheclocktower",
+      "g-dune",
+      "g-flip7",
+      "g-scout",
+      "g-splendor"
+    ],
+    "status": "upcoming"
+  },
+  {
+    "id": "ev-34",
+    "number": 34,
+    "title": "Social Shuffle #34 — Craft Brews & Meeples",
+    "date": "2026-09-20",
+    "time": "Sunday, 4:00 PM – 8:00 PM",
+    "venue": "Toit Brewpub",
+    "address": "Kalyani Nagar, Near Joggers Park, Pune",
+    "area": "Kalyani Nagar",
+    "category": "Regular Community Meetup",
+    "capacity": 70,
+    "ticketPrice": 350,
+    "description": "Packed house in Kalyani Nagar! Over 62 shufflers battled over Catan, Coup, Ticket to Ride, and Just One.",
+    "notes": "Huge turnout; congratulations to the Klask mini-tournament winners!",
+    "plannedGames": [
+      "g-catan",
+      "g-ticket",
+      "g-coup",
+      "g-justone",
+      "g-splendor",
+      "g-klask"
+    ],
+    "status": "completed"
+  },
+  {
+    "id": "ev-33",
+    "number": 33,
+    "title": "Social Shuffle #33 — West Pune Cozy Cafe Edition",
+    "date": "2026-09-13",
+    "time": "Sunday, 3:30 PM – 7:00 PM",
+    "venue": "Pagdandi Books Chai Cafe",
+    "address": "Baner-Pashan Link Road, Baner, Pune",
+    "area": "Baner",
+    "category": "Chill & Cozy Meetup",
+    "capacity": 45,
+    "ticketPrice": 300,
+    "description": "Cozy vibes with aromatic chai, indie books, and casual card and family board games.",
+    "notes": "Very popular with Baner/Aundh crowd. Sold out in 48 hours.",
+    "plannedGames": [
+      "g-azul",
+      "g-sushigo",
+      "g-dixit",
+      "g-flip7",
+      "g-seasalt"
+    ],
+    "status": "completed"
+  }
+]

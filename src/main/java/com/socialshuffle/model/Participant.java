@@ -30,6 +30,12 @@ public class Participant implements Serializable {
     @Column(name = "phone", length = 50)
     private String phone;
 
+    @Column(name = "password")
+    private String password;
+
+    @Column(name = "username", length = 150)
+    private String username;
+
     @Column(name = "area")
     private String area;
 
@@ -195,6 +201,22 @@ public class Participant implements Serializable {
 
     public void setLastAttendedEventTitle(String lastAttendedEventTitle) {
         this.lastAttendedEventTitle = lastAttendedEventTitle;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 
     @Override

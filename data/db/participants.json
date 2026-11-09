@@ -1,0 +1,192 @@
+[
+  {
+    "id": "p-mw97kkb5",
+    "name": "Aman Sharma",
+    "email": "aman.sharma@example.com",
+    "phone": "9822099112",
+    "password": "mysecretpass",
+    "username": "aman.sharma",
+    "area": "Baner",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Aman%20Sharma",
+    "bio": "Board game lover eager to play!",
+    "joinedDate": "2026-11-09",
+    "totalEventsAttended": 0,
+    "totalRegistrations": 0,
+    "gamesPlayedIds": [],
+    "venuesVisited": [],
+    "totalPaxBrought": 0
+  },
+  {
+    "id": "p-priya",
+    "name": "Priya Nair",
+    "email": "priya.nair@example.com",
+    "phone": "+91 97632 99011",
+    "area": "Wakad",
+    "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80",
+    "bio": "Weekly regular shuffler. Always looking for teammates for Just One & Wingspan!",
+    "joinedDate": "2024-01-15",
+    "totalEventsAttended": 6,
+    "totalRegistrations": 7,
+    "gamesPlayedIds": [
+      "g-codenames",
+      "g-justone",
+      "g-azul",
+      "g-wingspan",
+      "g-dixit",
+      "g-cascadia"
+    ],
+    "venuesVisited": [
+      "Toit Brewery",
+      "FC Road Social",
+      "Waari Book Cafe"
+    ],
+    "totalPaxBrought": 3,
+    "lastAttendedEventId": "ev-ss3",
+    "lastAttendedEventTitle": "Secret Social & Mystery Games",
+    "password": "shuffler123",
+    "username": "priya.nair"
+  },
+  {
+    "id": "p-rohan",
+    "name": "Rohan Deshmukh",
+    "email": "rohan.deshmukh@example.com",
+    "phone": "+91 98223 44551",
+    "area": "Koregaon Park",
+    "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80",
+    "bio": "Heavy strategy enthusiast. Terraforming Mars, Dune Imperium & Scythe fan.",
+    "joinedDate": "2024-01-05",
+    "totalEventsAttended": 11,
+    "totalRegistrations": 12,
+    "gamesPlayedIds": [
+      "g-dune",
+      "g-terraformingmars",
+      "g-scythe",
+      "g-brass",
+      "g-root"
+    ],
+    "venuesVisited": [
+      "Toit Brewery",
+      "FC Road Social",
+      "Effingut KP",
+      "Waari Book Cafe"
+    ],
+    "totalPaxBrought": 8,
+    "lastAttendedEventId": "ev-ss3",
+    "lastAttendedEventTitle": "Secret Social & Mystery Games",
+    "password": "shuffler123",
+    "username": "rohan.deshmukh"
+  },
+  {
+    "id": "p-ananya",
+    "name": "Ananya Kulkarni",
+    "email": "ananya.k@example.com",
+    "phone": "+91 98901 22334",
+    "area": "Baner",
+    "avatar": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=160&q=80",
+    "bio": "Designer by day, social deduction master by night. Secret Hitler champ.",
+    "joinedDate": "2024-01-20",
+    "totalEventsAttended": 8,
+    "totalRegistrations": 8,
+    "gamesPlayedIds": [
+      "g-secrethitler",
+      "g-avalon",
+      "g-bloodontheclocktower",
+      "g-decrypto",
+      "g-wavelength"
+    ],
+    "venuesVisited": [
+      "Toit Brewery",
+      "Waari Book Cafe"
+    ],
+    "totalPaxBrought": 5,
+    "lastAttendedEventId": "ev-ss3",
+    "lastAttendedEventTitle": "Secret Social & Mystery Games",
+    "password": "shuffler123",
+    "username": "ananya.k"
+  },
+  {
+    "id": "p-tanmay",
+    "name": "Tanmay Joshi",
+    "email": "tanmay.j@example.com",
+    "phone": "+91 98221 88990",
+    "area": "Viman Nagar",
+    "avatar": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=160&q=80",
+    "bio": "Love learning new modern European games and meeting new people over coffee.",
+    "joinedDate": "2024-02-01",
+    "totalEventsAttended": 5,
+    "totalRegistrations": 6,
+    "gamesPlayedIds": [
+      "g-catan",
+      "g-ticketoride",
+      "g-carcassonne",
+      "g-splendor",
+      "g-cascadia"
+    ],
+    "venuesVisited": [
+      "FC Road Social",
+      "Toit Brewery"
+    ],
+    "totalPaxBrought": 2,
+    "lastAttendedEventId": "ev-ss2",
+    "lastAttendedEventTitle": "Strategy & Heavyweight Battles",
+    "password": "shuffler123",
+    "username": "tanmay.j"
+  },
+  {
+    "id": "p-sneha",
+    "name": "Sneha Patil",
+    "email": "sneha.patil@example.com",
+    "phone": "+91 97665 11223",
+    "area": "Aundh",
+    "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80",
+    "bio": "Board game collector and casual teacher. Let us play Cascadia and Sushi Go!",
+    "joinedDate": "2024-02-14",
+    "totalEventsAttended": 4,
+    "totalRegistrations": 4,
+    "gamesPlayedIds": [
+      "g-cascadia",
+      "g-sushigo",
+      "g-azul",
+      "g-flip7",
+      "g-dixit"
+    ],
+    "venuesVisited": [
+      "Waari Book Cafe",
+      "FC Road Social"
+    ],
+    "totalPaxBrought": 1,
+    "lastAttendedEventId": "ev-ss3",
+    "lastAttendedEventTitle": "Secret Social & Mystery Games",
+    "password": "shuffler123",
+    "username": "sneha.patil"
+  },
+  {
+    "id": "p-aditya",
+    "name": "Aditya Shinde",
+    "email": "aditya.shinde@example.com",
+    "phone": "+91 98220 33445",
+    "area": "Kothrud",
+    "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80",
+    "bio": "Tournament competitor. Competitive Spirit Island and Blood on the Clocktower storyteller.",
+    "joinedDate": "2024-01-10",
+    "totalEventsAttended": 9,
+    "totalRegistrations": 10,
+    "gamesPlayedIds": [
+      "g-spiritisland",
+      "g-bloodontheclocktower",
+      "g-dune",
+      "g-root",
+      "g-clank"
+    ],
+    "venuesVisited": [
+      "Toit Brewery",
+      "FC Road Social",
+      "Effingut KP"
+    ],
+    "totalPaxBrought": 6,
+    "lastAttendedEventId": "ev-ss3",
+    "lastAttendedEventTitle": "Secret Social & Mystery Games",
+    "password": "shuffler123",
+    "username": "aditya.shinde"
+  }
+]

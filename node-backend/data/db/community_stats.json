@@ -1,0 +1,57 @@
+[
+  {
+    "id": "community-stats-main",
+    "membersCount": "2,400+",
+    "membersCountNumeric": 2400,
+    "gamesTaught": "120+",
+    "gamesTaughtNumeric": 120,
+    "soloPercentage": "60%",
+    "soloPercentageNumeric": 60,
+    "eventsHosted": "34",
+    "eventsHostedLabel": "Sold-out Editions",
+    "eventsHostedNumeric": 34,
+    "neighborhoods": [
+      "Koregaon Park",
+      "Baner",
+      "Kalyani Nagar"
+    ],
+    "heroHeadline": "Unplug, Roll Dice & Make Real Friends in Pune",
+    "heroSchedule": "Every Sunday 3 PM – 8 PM",
+    "heroDescription": "Social Shuffle brings together over 2,400+ board gamers across Koregaon Park, Baner, and Kalyani Nagar. Never played modern tabletop games before? Friendly community hosts explain every rule step-by-step!",
+    "communityTagline": "Connect with 2,400+ friendly Pune shufflers. Get instant table RSVP drops, spot alerts, rule walk-throughs, and weekend cafe photos.",
+    "whyJoinText": "Registering as a participant is 100% free and takes less than 30 seconds. Over 2,400+ Pune shufflers are waiting to welcome you to the table!",
+    "curatedMatchmakingText": "Curated matchmaking (60% come solo & make friends)",
+    "metricCards": [
+      {
+        "id": "members",
+        "value": "2,400+",
+        "label": "Pune Shufflers",
+        "color": "#FFFFFF",
+        "subtext": "Active community"
+      },
+      {
+        "id": "games",
+        "value": "120+",
+        "label": "Games Taught",
+        "color": "#4AB4A4",
+        "subtext": "In our library"
+      },
+      {
+        "id": "solo",
+        "value": "60%",
+        "label": "Come Solo",
+        "color": "#FFD230",
+        "subtext": "Instant table seating"
+      },
+      {
+        "id": "events",
+        "value": "34",
+        "label": "Sold-out Editions",
+        "color": "#FF751F",
+        "subtext": "Hosted meetups"
+      }
+    ],
+    "updatedAt": "2026-11-04T12:00:00.000Z",
+    "updatedBy": "Parimal Shete (Co-Founder)"
+  }
+]

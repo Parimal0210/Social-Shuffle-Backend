@@ -1,0 +1,29 @@
+{
+  "email": {
+    "enabled": true,
+    "provider": "smtp",
+    "host": "",
+    "port": 587,
+    "secure": false,
+    "user": "",
+    "pass": "",
+    "fromEmail": "Social Shuffle Pune <notifications@socialshuffle.in>",
+    "replyTo": "parimalmshete@gmail.com",
+    "lastTestedAt": null,
+    "lastTestStatus": null,
+    "etherealFallback": true
+  },
+  "whatsapp": {
+    "_comment": "WhatsApp integration disabled per user instruction",
+    "enabled": false,
+    "provider": "disabled",
+    "cloudApi": {
+      "accessToken": "",
+      "phoneNumberId": "",
+      "businessAccountId": ""
+    },
+    "groupInviteLink": "",
+    "defaultCountryCode": "91",
+    "lastTestedAt": null
+  }
+}

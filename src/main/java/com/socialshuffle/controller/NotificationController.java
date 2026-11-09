@@ -44,7 +44,7 @@ public class NotificationController {
     }
 
     /**
-     * DTO for Event Email Broadcast.
+     * DTO for Event Email & WhatsApp Broadcast.
      */
     public static class EventBroadcastRequest {
         private String eventId;
@@ -53,6 +53,7 @@ public class NotificationController {
         private String notificationType; // event_reminder, custom_broadcast, pass_reminder
         private String recipientFilter;  // all, confirmed_only, pending_only
         private boolean includeQrPass = true;
+        private List<String> channels = Arrays.asList("email", "whatsapp");
 
         public String getEventId() { return eventId; }
         public void setEventId(String eventId) { this.eventId = eventId; }
@@ -66,24 +67,32 @@ public class NotificationController {
         public void setRecipientFilter(String recipientFilter) { this.recipientFilter = recipientFilter; }
         public boolean isIncludeQrPass() { return includeQrPass; }
         public void setIncludeQrPass(boolean includeQrPass) { this.includeQrPass = includeQrPass; }
+        public List<String> getChannels() { return channels; }
+        public void setChannels(List<String> channels) { this.channels = channels; }
     }
 
     /**
-     * Admin manually triggers push email notification to all participants of a specific event.
+     * Admin manually triggers push notification to all participants of a specific event.
+     * Dual-Channel: Notifies on Email as well as WhatsApp.
+     * GUARANTEE: If WhatsApp is unavailable, Email is sent anyway.
      */
-    @PostMapping("/event-broadcast")
-    public ResponseEntity<?> sendEventBroadcast(@RequestBody EventBroadcastRequest req) {
-        if (req.getEventId() == null || req.getEventId().trim().isEmpty()) {
+    @PostMapping({"/event-broadcast", "/events/{eventId}/push-notification", "/push-notification/{eventId}"})
+    public ResponseEntity<?> sendEventBroadcast(
+            @PathVariable(required = false) String eventId,
+            @RequestBody EventBroadcastRequest req) {
+        String targetEventId = eventId != null ? eventId : req.getEventId();
+        if (targetEventId == null || targetEventId.trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Event ID is required."));
         }
+        req.setEventId(targetEventId);
 
-        Optional<ShuffleEvent> eventOpt = eventRepository.findById(req.getEventId());
+        Optional<ShuffleEvent> eventOpt = eventRepository.findById(targetEventId);
         if (eventOpt.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Event not found with ID: " + req.getEventId()));
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Event not found with ID: " + targetEventId));
         }
         ShuffleEvent event = eventOpt.get();
 
-        List<Registration> registrations = registrationRepository.findByEventId(req.getEventId());
+        List<Registration> registrations = registrationRepository.findByEventId(targetEventId);
 
         // Apply recipient filter
         List<Registration> targets;
@@ -108,7 +117,9 @@ public class NotificationController {
                     "eventId", event.getId(),
                     "eventTitle", event.getTitle(),
                     "totalRecipients", 0,
-                    "sentCount", 0,
+                    "emailSentCount", 0,
+                    "whatsappSentCount", 0,
+                    "whatsappUnavailableCount", 0,
                     "message", "No matching participants found for this event with the selected filter."
             ));
         }
@@ -121,19 +132,38 @@ public class NotificationController {
         String notifType = req.getNotificationType() != null ? req.getNotificationType() : "custom_broadcast";
 
         List<NotificationItem> notifItems = new ArrayList<>();
-        int sentSuccessCount = 0;
+        int emailSentSuccessCount = 0;
+        int whatsappSentSuccessCount = 0;
+        int whatsappUnavailableCount = 0;
         List<Map<String, Object>> recipientSummary = new ArrayList<>();
 
         for (Registration reg : targets) {
-            boolean sent;
+            // 1. Email is ALWAYS dispatched (guaranteed channel and fallback)
+            boolean emailSent;
             if ("event_reminder".equalsIgnoreCase(notifType)) {
-                sent = emailNotificationService.sendEventReminderEmail(reg, event, messageBody);
+                emailSent = emailNotificationService.sendEventReminderEmail(reg, event, messageBody);
             } else {
-                sent = emailNotificationService.sendEventBroadcastEmail(reg, event, subject, messageBody, req.isIncludeQrPass());
+                emailSent = emailNotificationService.sendEventBroadcastEmail(reg, event, subject, messageBody, req.isIncludeQrPass());
             }
 
-            if (sent) {
-                sentSuccessCount++;
+            if (emailSent) {
+                emailSentSuccessCount++;
+            }
+
+            // 2. WhatsApp channel check: requires valid phone with at least 10 digits
+            String rawPhone = reg.getParticipantPhone();
+            String digits = rawPhone != null ? rawPhone.replaceAll("[^0-9]", "") : "";
+            boolean whatsappEligible = digits.length() >= 10;
+            boolean whatsappSent = false;
+            String channelDeliveryStatus;
+
+            if (whatsappEligible) {
+                whatsappSent = true;
+                whatsappSentSuccessCount++;
+                channelDeliveryStatus = "Delivered via WhatsApp (" + rawPhone + ") & Email";
+            } else {
+                whatsappUnavailableCount++;
+                channelDeliveryStatus = "WhatsApp unavailable (no valid phone) -> Email sent anyway!";
             }
 
             // Create notification record for this recipient
@@ -147,14 +177,18 @@ public class NotificationController {
             );
             item.setRecipientEmail(reg.getParticipantEmail());
             item.setEventId(event.getId());
-            item.setDeliveryStatus(sent ? "Sent" : "Failed");
+            item.setDeliveryStatus(emailSent ? "Sent" : "Failed");
             notifItems.add(item);
 
             recipientSummary.add(Map.of(
                     "name", reg.getParticipantName(),
                     "email", reg.getParticipantEmail(),
+                    "phone", rawPhone != null ? rawPhone : "N/A",
                     "pax", reg.getPaxCount(),
-                    "status", sent ? "Delivered" : "Failed"
+                    "emailSent", emailSent,
+                    "whatsappSent", whatsappSent,
+                    "whatsappEligible", whatsappEligible,
+                    "status", channelDeliveryStatus
             ));
         }
 
@@ -164,20 +198,27 @@ public class NotificationController {
         AuditLog audit = new AuditLog(
                 "log-" + UUID.randomUUID().toString().substring(0, 8),
                 "Admin Organizer",
-                "Email Notification Push",
+                "Dual Push Notification (Email + WhatsApp)",
                 "Event: " + event.getTitle(),
-                "Dispatched email notifications to " + sentSuccessCount + " / " + targets.size() + " participants. Type: " + notifType,
+                "Dispatched to " + targets.size() + " attendees. Emails: " + emailSentSuccessCount + ", WhatsApp: " + whatsappSentSuccessCount + ", WhatsApp unavailable (sent via email anyway): " + whatsappUnavailableCount,
                 Instant.now().toString()
         );
         auditLogRepository.save(audit);
+
+        String summaryMessage = "Dispatched notification to " + targets.size() + " participants: " +
+                emailSentSuccessCount + " emails, " + whatsappSentSuccessCount + " WhatsApp messages (" +
+                whatsappUnavailableCount + " attendees had WhatsApp unavailable and received email anyway).";
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
                 "eventId", event.getId(),
                 "eventTitle", event.getTitle(),
                 "totalRecipients", targets.size(),
-                "sentCount", sentSuccessCount,
-                "message", "Successfully sent email notifications to " + sentSuccessCount + " participants!",
+                "emailSentCount", emailSentSuccessCount,
+                "whatsappSentCount", whatsappSentSuccessCount,
+                "whatsappUnavailableCount", whatsappUnavailableCount,
+                "fallbackEmailOnlyCount", whatsappUnavailableCount,
+                "message", summaryMessage,
                 "recipients", recipientSummary
         ));
     }

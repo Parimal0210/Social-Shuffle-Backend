@@ -1,0 +1,18 @@
+[
+  {
+    "id": "notif-1",
+    "title": "Social Shuffle #4 Meetup This Weekend 🎲",
+    "message": "Registrations are filling fast at FC Road Social. 35+ spots confirmed!",
+    "type": "event",
+    "timestamp": "2 hours ago",
+    "read": false
+  },
+  {
+    "id": "notif-2",
+    "title": "New Game Added: Harmonies",
+    "message": "Libellud gorgeous pattern builder Harmonies is now available in the Pune game library.",
+    "type": "system",
+    "timestamp": "Yesterday",
+    "read": true
+  }
+]

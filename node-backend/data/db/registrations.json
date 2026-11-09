@@ -1,0 +1,118 @@
+[
+  {
+    "id": "reg-ss4-priya",
+    "eventId": "ev-ss4",
+    "participantId": "p-priya",
+    "participantName": "Priya Nair",
+    "participantEmail": "priya.nair@example.com",
+    "participantPhone": "+91 97632 99011",
+    "participantArea": "Wakad",
+    "paxCount": 2,
+    "guests": [
+      {
+        "id": "g-1",
+        "name": "Aarav Nair",
+        "phone": "+91 97632 99012"
+      }
+    ],
+    "registeredAt": "2024-11-01T10:30:00Z",
+    "attendanceStatus": "Pending",
+    "paymentStatus": "Confirmed",
+    "gamesPlayed": [],
+    "notes": "Please assign to beginner/party game table"
+  },
+  {
+    "id": "reg-ss4-rohan",
+    "eventId": "ev-ss4",
+    "participantId": "p-rohan",
+    "participantName": "Rohan Deshmukh",
+    "participantEmail": "rohan.deshmukh@example.com",
+    "participantPhone": "+91 98223 44551",
+    "participantArea": "Koregaon Park",
+    "paxCount": 1,
+    "guests": [],
+    "registeredAt": "2024-11-01T11:15:00Z",
+    "attendanceStatus": "Pending",
+    "paymentStatus": "Confirmed",
+    "gamesPlayed": [],
+    "notes": "Excited for Terraforming Mars session"
+  },
+  {
+    "id": "reg-ss4-ananya",
+    "eventId": "ev-ss4",
+    "participantId": "p-ananya",
+    "participantName": "Ananya Kulkarni",
+    "participantEmail": "ananya.k@example.com",
+    "participantPhone": "+91 98901 22334",
+    "participantArea": "Baner",
+    "paxCount": 1,
+    "guests": [],
+    "registeredAt": "2024-11-01T12:00:00Z",
+    "attendanceStatus": "Pending",
+    "paymentStatus": "Confirmed",
+    "gamesPlayed": []
+  },
+  {
+    "id": "reg-ss4-aditya",
+    "eventId": "ev-ss4",
+    "participantId": "p-aditya",
+    "participantName": "Aditya Shinde",
+    "participantEmail": "aditya.shinde@example.com",
+    "participantPhone": "+91 98220 33445",
+    "participantArea": "Kothrud",
+    "paxCount": 2,
+    "guests": [
+      {
+        "id": "g-2",
+        "name": "Kavita Shinde"
+      }
+    ],
+    "registeredAt": "2024-11-01T14:20:00Z",
+    "attendanceStatus": "Pending",
+    "paymentStatus": "Confirmed",
+    "gamesPlayed": []
+  },
+  {
+    "id": "reg-ss3-priya",
+    "eventId": "ev-ss3",
+    "participantId": "p-priya",
+    "participantName": "Priya Nair",
+    "participantEmail": "priya.nair@example.com",
+    "participantPhone": "+91 97632 99011",
+    "participantArea": "Wakad",
+    "paxCount": 1,
+    "guests": [],
+    "registeredAt": "2024-10-15T09:00:00Z",
+    "attendanceStatus": "Checked In",
+    "paymentStatus": "Confirmed",
+    "checkInTime": "2024-10-20T16:15:00Z",
+    "gamesPlayed": [
+      "g-codenames",
+      "g-justone"
+    ]
+  },
+  {
+    "id": "reg-ss3-rohan",
+    "eventId": "ev-ss3",
+    "participantId": "p-rohan",
+    "participantName": "Rohan Deshmukh",
+    "participantEmail": "rohan.deshmukh@example.com",
+    "participantPhone": "+91 98223 44551",
+    "participantArea": "Koregaon Park",
+    "paxCount": 2,
+    "guests": [
+      {
+        "id": "g-3",
+        "name": "Manish Verma"
+      }
+    ],
+    "registeredAt": "2024-10-15T10:00:00Z",
+    "attendanceStatus": "Checked In",
+    "paymentStatus": "Confirmed",
+    "checkInTime": "2024-10-20T16:10:00Z",
+    "gamesPlayed": [
+      "g-bloodontheclocktower",
+      "g-secrethitler"
+    ]
+  }
+]
