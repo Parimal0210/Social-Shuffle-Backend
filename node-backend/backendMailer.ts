@@ -1,6 +1,14 @@
 import nodemailer, { type Transporter, type TestAccount } from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
+import dns from 'dns';
+
+// Force IPv4 lookup first to prevent 3-5 second IPv6 timeout delays on Linux/cloud hosts
+try {
+  dns.setDefaultResultOrder?.('ipv4first');
+} catch {
+  // Ignore in environments where not supported
+}
 
 export interface EmailConfig {
   enabled: boolean;
@@ -36,11 +44,37 @@ export interface CommunicationsConfig {
 }
 
 const CONFIG_PATH = path.resolve(process.cwd(), 'src/data/db/communications_config.json');
+const ETHEREAL_CACHE_PATH = path.resolve(process.cwd(), 'src/data/db/.ethereal_account.json');
 
-// Cache transporter instance
+// Cache transporter instance & persistent test account
 let cachedTransporter: Transporter | null = null;
 let cachedTransporterKey = '';
 let etherealAccount: TestAccount | null = null;
+
+const loadEtherealAccount = (): TestAccount | null => {
+  if (etherealAccount) return etherealAccount;
+  try {
+    if (fs.existsSync(ETHEREAL_CACHE_PATH)) {
+      const data = JSON.parse(fs.readFileSync(ETHEREAL_CACHE_PATH, 'utf-8'));
+      if (data && data.user && data.pass && data.smtp) {
+        etherealAccount = data as TestAccount;
+        return etherealAccount;
+      }
+    }
+  } catch {
+    // Ignore cache load failure
+  }
+  return null;
+};
+
+const saveEtherealAccount = (account: TestAccount): void => {
+  try {
+    etherealAccount = account;
+    fs.writeFileSync(ETHEREAL_CACHE_PATH, JSON.stringify(account, null, 2), 'utf-8');
+  } catch {
+    // Ignore cache save failure
+  }
+};
 
 export const loadCommunicationsConfig = (): CommunicationsConfig => {
   try {
@@ -146,6 +180,12 @@ export const getMailTransporter = async (): Promise<{ transporter: Transporter; 
     const transporter = isGmail
       ? nodemailer.createTransport({
           service: 'gmail',
+          pool: true,
+          maxConnections: 5,
+          maxMessages: 100,
+          connectionTimeout: 6000,
+          greetingTimeout: 5000,
+          socketTimeout: 15000,
           auth: {
             user: emailCfg.user,
             pass: emailCfg.pass
@@ -155,6 +195,12 @@ export const getMailTransporter = async (): Promise<{ transporter: Transporter; 
           host: emailCfg.host || 'smtp.gmail.com',
           port: emailCfg.port || 587,
           secure: emailCfg.secure || false,
+          pool: true,
+          maxConnections: 5,
+          maxMessages: 100,
+          connectionTimeout: 6000,
+          greetingTimeout: 5000,
+          socketTimeout: 15000,
           auth: {
             user: emailCfg.user,
             pass: emailCfg.pass
@@ -167,26 +213,34 @@ export const getMailTransporter = async (): Promise<{ transporter: Transporter; 
   }
 
   // Fallback: Real Ethereal Test SMTP Transport (Actually transmits mail over SMTP and creates preview links)
-  if (!etherealAccount) {
-    console.log('[Mailer] No custom SMTP credentials found. Initializing automated Ethereal test SMTP account...');
+  let activeEthereal = loadEtherealAccount();
+  if (!activeEthereal) {
+    console.log('[Mailer] Initializing automated Ethereal test SMTP account (first-time caching)...');
     try {
-      etherealAccount = await nodemailer.createTestAccount();
-      console.log(`[Mailer] Ethereal SMTP account created: ${etherealAccount.user}`);
+      const created = await nodemailer.createTestAccount();
+      saveEtherealAccount(created);
+      activeEthereal = created;
+      console.log(`[Mailer] Ethereal SMTP account created and cached: ${created.user}`);
     } catch (err) {
       console.warn('[Mailer] Could not create Ethereal account, falling back to JSON transport', err);
     }
   }
 
-  if (etherealAccount) {
-    const etherealKey = `ethereal:${etherealAccount.user}`;
+  if (activeEthereal) {
+    const etherealKey = `ethereal:${activeEthereal.user}`;
     if (!cachedTransporter || cachedTransporterKey !== etherealKey) {
       cachedTransporter = nodemailer.createTransport({
-        host: etherealAccount.smtp.host,
-        port: etherealAccount.smtp.port,
-        secure: etherealAccount.smtp.secure,
+        host: activeEthereal.smtp.host,
+        port: activeEthereal.smtp.port,
+        secure: activeEthereal.smtp.secure,
+        pool: true,
+        maxConnections: 3,
+        connectionTimeout: 6000,
+        greetingTimeout: 5000,
+        socketTimeout: 15000,
         auth: {
-          user: etherealAccount.user,
-          pass: etherealAccount.pass
+          user: activeEthereal.user,
+          pass: activeEthereal.pass
         }
       });
       cachedTransporterKey = etherealKey;
@@ -219,11 +273,72 @@ export interface OutboundMailResult {
   error?: string;
 }
 
+// In-memory active Gmail OAuth token synced from Firebase Google Sign-In
+let activeGmailOAuthToken: string | null = null;
+let activeGmailOAuthEmail: string | null = null;
+
+export const setGmailOAuthToken = (token: string | null, email?: string | null) => {
+  activeGmailOAuthToken = token;
+  activeGmailOAuthEmail = email || null;
+  console.log(`[Gmail OAuth] Token updated. Connected: ${Boolean(token)} (${email || 'unknown'})`);
+};
+
+export const getGmailOAuthStatus = () => ({
+  connected: Boolean(activeGmailOAuthToken),
+  email: activeGmailOAuthEmail
+});
+
 /**
  * Dispatches a real outbound email message
  */
 export const sendOutboundEmail = async (req: OutboundMailRequest): Promise<OutboundMailResult> => {
   const config = loadCommunicationsConfig();
+
+  // Priority 1: Official Google Gmail REST API via OAuth if authenticated
+  if (activeGmailOAuthToken) {
+    try {
+      const utf8Email = [
+        `From: "Social Shuffle Pune" <${activeGmailOAuthEmail || 'me'}>`,
+        `To: ${req.to}`,
+        `Subject: =?utf-8?B?${Buffer.from(req.subject).toString('base64')}?=`,
+        `MIME-Version: 1.0`,
+        `Content-Type: text/html; charset=utf-8`,
+        '',
+        req.html
+      ].join('\r\n');
+
+      const raw = Buffer.from(utf8Email)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      const gRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${activeGmailOAuthToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ raw })
+      });
+
+      const gData: any = await gRes.json();
+      if (gRes.ok && gData?.id) {
+        console.log(`[Gmail API SUCCESS] Delivered to ${req.to} | Message ID: ${gData.id}`);
+        return {
+          success: true,
+          messageId: gData.id,
+          provider: 'gmail_oauth_api',
+          isRealSmtp: true,
+          to: req.to
+        };
+      }
+      console.warn('[Gmail API Warning] OAuth API failed, trying SMTP/Ethereal fallback:', gData?.error?.message || gData);
+    } catch (gErr: any) {
+      console.warn('[Gmail API Error] Network error during Gmail REST API call, trying SMTP/Ethereal:', gErr?.message);
+    }
+  }
+
   try {
     const { transporter, provider, isRealSmtp } = await getMailTransporter();
 
@@ -255,17 +370,24 @@ export const sendOutboundEmail = async (req: OutboundMailRequest): Promise<Outbo
     } catch (sendErr: any) {
       // If custom SMTP failed (e.g. invalid credentials or blocked port), fall back to live Ethereal test transport
       if (provider !== 'ethereal') {
-        console.warn(`[Mailer] Custom SMTP transmission failed (${sendErr?.message}), switching to Ethereal test transport...`);
-        if (!etherealAccount) {
-          etherealAccount = await nodemailer.createTestAccount();
+        console.warn(`[Mailer] Custom SMTP transmission failed (${sendErr?.message}), switching to fast Ethereal test transport...`);
+        let fallbackAccount = loadEtherealAccount();
+        if (!fallbackAccount) {
+          fallbackAccount = await nodemailer.createTestAccount();
+          saveEtherealAccount(fallbackAccount);
         }
         const etherealTransporter = nodemailer.createTransport({
-          host: etherealAccount.smtp.host,
-          port: etherealAccount.smtp.port,
-          secure: etherealAccount.smtp.secure,
+          host: fallbackAccount.smtp.host,
+          port: fallbackAccount.smtp.port,
+          secure: fallbackAccount.smtp.secure,
+          pool: true,
+          maxConnections: 3,
+          connectionTimeout: 6000,
+          greetingTimeout: 5000,
+          socketTimeout: 15000,
           auth: {
-            user: etherealAccount.user,
-            pass: etherealAccount.pass
+            user: fallbackAccount.user,
+            pass: fallbackAccount.pass
           }
         });
 

@@ -1,16 +1,16 @@
 {
   "email": {
     "enabled": true,
-    "provider": "smtp",
-    "host": "",
+    "provider": "gmail",
+    "host": "smtp.gmail.com",
     "port": 587,
     "secure": false,
-    "user": "",
-    "pass": "",
-    "fromEmail": "Social Shuffle Pune <notifications@socialshuffle.in>",
+    "user": "parimalmshete@gmail.com",
+    "pass": "uychtjuqvydquncv",
+    "fromEmail": "Social Shuffle Pune <parimalmshete@gmail.com>",
     "replyTo": "parimalmshete@gmail.com",
-    "lastTestedAt": null,
-    "lastTestStatus": null,
+    "lastTestedAt": "2026-11-10T13:16:53Z",
+    "lastTestStatus": "success",
     "etherealFallback": true
   },
   "whatsapp": {
