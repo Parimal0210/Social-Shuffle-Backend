@@ -74,6 +74,23 @@ public class Game implements Serializable {
         this.description = description;
     }
 
+    public Game(String id, String name, String category, String difficulty, String players, String duration, String description, boolean active, int playsCount, List<String> tags, Double rating, String image, String owner, String venue) {
+        this.id = id;
+        this.name = name;
+        this.category = category;
+        this.difficulty = difficulty;
+        this.players = players;
+        this.duration = duration;
+        this.description = description;
+        this.active = active;
+        this.playsCount = playsCount;
+        this.tags = tags != null ? tags : new ArrayList<>();
+        this.rating = rating;
+        this.image = image;
+        this.owner = owner;
+        this.venue = venue;
+    }
+
     public Game(String id, String name, String category, String players, String duration, String difficulty, String owner, boolean active, String venue, String description) {
         this.id = id;
         this.name = name;

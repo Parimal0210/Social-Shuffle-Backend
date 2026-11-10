@@ -50,6 +50,15 @@ public class AdminAccount implements Serializable {
     public AdminAccount() {
     }
 
+    public AdminAccount(String id, String name, String email, String phone, String password) {
+        this.id = id;
+        this.name = name;
+        this.email = email;
+        this.phone = phone;
+        this.password = password;
+        this.active = true;
+    }
+
     public AdminAccount(String id, String name, String email, String phone, String password, String designation, String avatar) {
         this.id = id;
         this.name = name;

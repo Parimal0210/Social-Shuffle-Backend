@@ -235,7 +235,7 @@ public class NotificationController {
         req.setMessage(note != null ? note : "Your upcoming board game meetup is happening soon! Check your pass details and arrive 10 minutes early.");
         req.setRecipientFilter("all");
         req.setIncludeQrPass(true);
-        return sendEventBroadcast(req);
+        return sendEventBroadcast(eventId, req);
     }
 
     /**
