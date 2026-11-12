@@ -506,3 +506,222 @@ export const dispatchDualEventNotificationBatch = async (
     recipients: recipientStatuses
   };
 };
+
+/**
+ * Generates an official Welcome Email for newly registered community participants
+ */
+export const generateWelcomeEmailHtml = (participantName: string, participantEmail: string): string => {
+  const cleanName = participantName || 'Fellow Shuffler';
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body { margin: 0; padding: 0; background-color: #080D1F; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #e2e8f0; }
+  .container { max-width: 600px; margin: 20px auto; background-color: #0E162B; border: 1px solid #1F305E; border-radius: 16px; overflow: hidden; }
+  .header { background: linear-gradient(135deg, #FF751F 0%, #D85507 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
+  .badge { display: inline-block; background-color: #FFD230; color: #10173E; font-weight: 800; font-size: 11px; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; margin-bottom: 12px; }
+  .title { margin: 0; font-size: 24px; font-weight: 900; }
+  .body { padding: 30px 24px; }
+  .highlight-box { background: rgba(255, 117, 31, 0.1); border-left: 4px solid #FF751F; border-radius: 8px; padding: 16px; margin-bottom: 22px; font-size: 14px; line-height: 1.6; color: #cbd5e1; }
+  .card { background-color: #131E3A; border: 1px solid #1F305E; border-radius: 12px; padding: 18px; margin-bottom: 22px; }
+  .perk { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; font-size: 13px; color: #cbd5e1; }
+  .perk-icon { font-size: 18px; line-height: 1; margin-top: 2px; }
+  .btn-primary { display: inline-block; background: #FF751F; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: bold; font-size: 13px; margin: 6px; }
+  .footer { padding: 18px 24px; background-color: #050814; border-top: 1px solid #1F305E; text-align: center; font-size: 12px; color: #64748b; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="badge">🎲 Welcome to Social Shuffle Pune</div>
+      <h1 class="title">You're Officially Part of the Community, ${cleanName}! 🎉</h1>
+    </div>
+    <div class="body">
+      <div class="highlight-box">
+        <strong>Turning Strangers into Teammates across Pune! 🎲✨</strong><br/>
+        We are thrilled to welcome you to <strong>Social Shuffle</strong>. Every Sunday afternoon, we gather board game lovers, curious first-timers, and tabletop veterans at cozy artisan cafes across Pune.
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;margin-bottom:14px;font-size:15px;color:#FFD230;">✨ What You Get As A Shuffler</h3>
+        <div class="perk">
+          <span class="perk-icon">📚</span>
+          <div><strong>120+ Modern Board Games:</strong> From quick party games (Codenames, Just One, Flip 7) to rich euro strategy (Catan, Terraforming Mars, Dune: Imperium).</div>
+        </div>
+        <div class="perk">
+          <span class="perk-icon">🙋‍♂️</span>
+          <div><strong>Solo-Friendly Guarantee:</strong> Over 60% of our attendees come completely on their own! Our co-founders, Parimal and Diksha, personally greet you, explain rules step-by-step, and match you with a welcoming table.</div>
+        </div>
+        <div class="perk">
+          <span class="perk-icon">☕</span>
+          <div><strong>Premium Cafe Partners:</strong> Hosted at cozy cafes across Koregaon Park, Kalyani Nagar, and Baner with artisan coffee, smoothies, pizzas, and snacks.</div>
+        </div>
+        <div class="perk">
+          <span class="perk-icon">📱</span>
+          <div><strong>Digital QR Pass:</strong> Reserve spots with 1 tap, download instant PDF entry passes, and track your gameplay passport and achievement badges.</div>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin: 24px 0 10px 0;">
+        <p style="font-size: 13px; color: #94a3b8; margin-bottom: 14px;">Your registered email: <strong>${participantEmail}</strong></p>
+        <a href="https://chat.whatsapp.com/SocialShufflePune" target="_blank" class="btn-primary" style="background:#25D366;color:#ffffff;">
+          💬 Join Pune WhatsApp Community Desk
+        </a>
+      </div>
+    </div>
+    <div class="footer">
+      Social Shuffle Pune • Koregaon Park & Baner<br/>
+      Need help? Reach out directly to Parimal: parimalmshete@gmail.com
+    </div>
+  </div>
+</body>
+</html>`;
+};
+
+/**
+ * Generates an applicant confirmation email for volunteer / host applications
+ */
+export const generateVolunteerConfirmationEmailHtml = (volunteer: any): string => {
+  const name = volunteer.name || 'Fellow Shuffler';
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background-color:#080D1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0;">
+  <div style="max-width:600px;margin:20px auto;background-color:#0E162B;border:1px solid #1F305E;border-radius:16px;overflow:hidden;">
+    <div style="background:linear-gradient(135deg, #4AB4A4 0%, #208E80 100%);padding:28px 24px;text-align:center;color:#10173E;">
+      <span style="background-color:#10173E;color:#4AB4A4;font-weight:800;font-size:11px;padding:4px 12px;border-radius:9999px;text-transform:uppercase;">Table Host & Volunteer Desk</span>
+      <h2 style="margin:12px 0 0 0;font-size:22px;font-weight:900;">Thank You for Stepping Up, ${name}! 🎲</h2>
+    </div>
+    <div style="padding:24px;">
+      <p style="font-size:14px;color:#cbd5e1;line-height:1.6;margin-top:0;">
+        We received your volunteer application for Social Shuffle Pune. Our volunteer hosts are the heart and soul of our community—explaining rules patiently, making first-timers feel welcome, and keeping table energy infectious.
+      </p>
+      <div style="background-color:#131E3A;border:1px solid #1F305E;border-radius:12px;padding:16px;margin:18px 0;font-size:13px;">
+        <div style="margin-bottom:8px;"><strong>Applicant Name:</strong> ${name}</div>
+        <div style="margin-bottom:8px;"><strong>Preferred Area:</strong> ${volunteer.preferredArea || 'Pune'}</div>
+        <div style="margin-bottom:8px;"><strong>Games You Can Teach:</strong> ${volunteer.gamesKnown || 'Various Tabletop Titles'}</div>
+        <div><strong>Status:</strong> Under Review by Parimal & Diksha</div>
+      </div>
+      <p style="font-size:13px;color:#94a3b8;line-height:1.5;">
+        Parimal will get in touch with you via WhatsApp or Email within 24-48 hours with host onboarding details and meetup assignments.
+      </p>
+    </div>
+    <div style="padding:16px 24px;background-color:#050814;border-top:1px solid #1F305E;text-align:center;font-size:11px;color:#64748b;">
+      Social Shuffle Pune Community • parimalmshete@gmail.com
+    </div>
+  </div>
+</body>
+</html>`;
+};
+
+/**
+ * Generates an administrative alert email when a new volunteer application is submitted
+ */
+export const generateVolunteerAdminAlertEmailHtml = (volunteer: any): string => {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background-color:#080D1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0;">
+  <div style="max-width:600px;margin:20px auto;background-color:#0E162B;border:1px solid #1F305E;border-radius:16px;overflow:hidden;">
+    <div style="background:#FF751F;padding:24px;text-align:center;color:#ffffff;">
+      <span style="background-color:#ffffff;color:#FF751F;font-weight:800;font-size:11px;padding:4px 12px;border-radius:9999px;text-transform:uppercase;">Admin Alert</span>
+      <h2 style="margin:10px 0 0 0;font-size:20px;font-weight:900;">New Volunteer Application Received! 🙋‍♂️</h2>
+    </div>
+    <div style="padding:24px;font-size:13px;line-height:1.6;color:#cbd5e1;">
+      <p>A new volunteer application was submitted on Social Shuffle:</p>
+      <div style="background-color:#131E3A;border:1px solid #283677;border-radius:12px;padding:16px;margin:14px 0;">
+        <div style="margin-bottom:8px;"><strong>Full Name:</strong> ${volunteer.name}</div>
+        <div style="margin-bottom:8px;"><strong>Email:</strong> ${volunteer.email}</div>
+        <div style="margin-bottom:8px;"><strong>Phone:</strong> ${volunteer.phone || 'N/A'}</div>
+        <div style="margin-bottom:8px;"><strong>Area:</strong> ${volunteer.preferredArea || 'Pune'}</div>
+        <div style="margin-bottom:8px;"><strong>Games Known / Can Teach:</strong> ${volunteer.gamesKnown || 'Not specified'}</div>
+        <div><strong>Why they want to volunteer:</strong> ${volunteer.motivation || 'Love for community'}</div>
+      </div>
+      <p style="color:#94a3b8;font-size:12px;">Submitted at: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)</p>
+    </div>
+  </div>
+</body>
+</html>`;
+};
+
+/**
+ * Generates an administrative alert for safety / grievance reports
+ */
+export const generateReportAdminAlertEmailHtml = (report: any): string => {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background-color:#080D1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0;">
+  <div style="max-width:600px;margin:20px auto;background-color:#0E162B;border:2px solid #ef4444;border-radius:16px;overflow:hidden;">
+    <div style="background:#ef4444;padding:24px;text-align:center;color:#ffffff;">
+      <span style="background-color:#ffffff;color:#ef4444;font-weight:800;font-size:11px;padding:4px 12px;border-radius:9999px;text-transform:uppercase;">URGENT LEADERSHIP DESK</span>
+      <h2 style="margin:10px 0 0 0;font-size:20px;font-weight:900;">Safety / Grievance Report Filed ⚠️</h2>
+    </div>
+    <div style="padding:24px;font-size:13px;line-height:1.6;color:#cbd5e1;">
+      <div style="background-color:#131E3A;border:1px solid #283677;border-radius:12px;padding:16px;margin:14px 0;">
+        <div style="margin-bottom:8px;"><strong>Report Category:</strong> <span style="color:#ef4444;font-weight:bold;">${report.category || 'General Safety'}</span></div>
+        <div style="margin-bottom:8px;"><strong>Event ID / Title:</strong> ${report.eventId || report.eventTitle || 'General / Unspecified'}</div>
+        <div style="margin-bottom:8px;"><strong>Reporter:</strong> ${report.reporterName || 'Anonymous'} (${report.reporterEmail || 'No email provided'})</div>
+        <div style="margin-bottom:8px;"><strong>Incident Description:</strong></div>
+        <div style="background:#080D1F;border:1px solid #ef4444;border-radius:8px;padding:12px;color:#fca5a5;">${report.description || 'No details provided'}</div>
+      </div>
+      <p style="color:#94a3b8;font-size:12px;">Reported At: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)</p>
+    </div>
+  </div>
+</body>
+</html>`;
+};
+
+/**
+ * Generates reporter acknowledgment email
+ */
+export const generateReportAckEmailHtml = (report: any): string => {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background-color:#080D1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0;">
+  <div style="max-width:600px;margin:20px auto;background-color:#0E162B;border:1px solid #1F305E;border-radius:16px;overflow:hidden;">
+    <div style="background:#131E3A;border-bottom:2px solid #FF751F;padding:24px;text-align:center;color:#ffffff;">
+      <h2 style="margin:0;font-size:18px;font-weight:bold;color:#FFD230;">We Have Received Your Report</h2>
+    </div>
+    <div style="padding:24px;font-size:13px;line-height:1.6;color:#cbd5e1;">
+      <p>Hello ${report.reporterName || 'Fellow Shuffler'},</p>
+      <p>Thank you for bringing this matter to our attention. Social Shuffle has a strict zero-tolerance policy regarding harassment, disrespect, or any conduct that compromises the safety and joy of our tabletop community.</p>
+      <p>Our co-founders, Parimal and Diksha, are personally reviewing the details of your submission with complete discretion and confidentiality.</p>
+    </div>
+    <div style="padding:16px 24px;background-color:#050814;text-align:center;font-size:11px;color:#64748b;">
+      Social Shuffle Pune Grievance Desk • parimalmshete@gmail.com
+    </div>
+  </div>
+</body>
+</html>`;
+};
+
+/**
+ * Generates admin feedback notification email
+ */
+export const generateFeedbackAdminAlertEmailHtml = (feedback: any): string => {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background-color:#080D1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0;">
+  <div style="max-width:600px;margin:20px auto;background-color:#0E162B;border:1px solid #1F305E;border-radius:16px;overflow:hidden;">
+    <div style="background:linear-gradient(135deg, #1A255C 0%, #151E4D 100%);padding:24px;text-align:center;color:#FFD230;">
+      <span style="background-color:#FFD230;color:#10173E;font-weight:800;font-size:11px;padding:4px 12px;border-radius:9999px;text-transform:uppercase;">Community Feedback</span>
+      <h2 style="margin:10px 0 0 0;font-size:20px;font-weight:900;">⭐ ${feedback.rating || 5}/5 Star Review Submitted</h2>
+    </div>
+    <div style="padding:24px;font-size:13px;line-height:1.6;color:#cbd5e1;">
+      <div style="background-color:#131E3A;border:1px solid #283677;border-radius:12px;padding:16px;margin:14px 0;">
+        <div style="margin-bottom:8px;"><strong>Attendee Name:</strong> ${feedback.userName || 'Anonymous Shuffler'}</div>
+        <div style="margin-bottom:8px;"><strong>Event ID:</strong> ${feedback.eventId || 'Unspecified'}</div>
+        <div style="margin-bottom:8px;"><strong>Rating:</strong> ⭐ ${feedback.rating || 5} Stars</div>
+        <div style="margin-bottom:8px;"><strong>Review / Comments:</strong></div>
+        <div style="background:#080D1F;border:1px solid #283677;border-radius:8px;padding:12px;color:#f8fafc;">${feedback.comment || 'No comment text provided'}</div>
+      </div>
+      <p style="color:#94a3b8;font-size:12px;">Submitted at: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)</p>
+    </div>
+  </div>
+</body>
+</html>`;
+};
