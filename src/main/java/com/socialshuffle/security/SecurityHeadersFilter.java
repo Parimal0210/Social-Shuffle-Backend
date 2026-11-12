@@ -20,8 +20,6 @@ public class SecurityHeadersFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
         HttpServletRequest httpRequest = (HttpServletRequest) request;
 
-        // 1. Cross-Domain embedding & frame permission (allows iframe embedding across onrender.com and custom domains)
-        httpResponse.setHeader("Content-Security-Policy", "frame-ancestors 'self' https://social-shuffle-ps.onrender.com https://*.onrender.com https://socialshufflepune.com https://*.socialshufflepune.com https://socialshuffle.in https://*.socialshuffle.in https://*.run.app;");
 
         // 2. MIME type sniffing prevention
         httpResponse.setHeader("X-Content-Type-Options", "nosniff");

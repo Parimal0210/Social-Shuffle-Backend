@@ -105,11 +105,8 @@ async function startServer() {
     res.setHeader('Access-Control-Max-Age', '86400');
     res.setHeader('Vary', 'Origin, Access-Control-Request-Headers');
 
-    // Cross-Domain embedding & frame permission (allows iframe embedding across onrender.com and custom domains)
-    res.setHeader(
-      'Content-Security-Policy',
-      "frame-ancestors 'self' https://social-shuffle-ps.onrender.com https://*.onrender.com https://socialshufflepune.com https://*.socialshufflepune.com https://socialshuffle.in https://*.socialshuffle.in https://*.run.app http://localhost:*;"
-    );
+    // Remove any restrictive framing headers so Google AI Studio preview iframe and custom domains can embed smoothly
+    res.removeHeader('X-Frame-Options');
 
     // Fast-return on preflight OPTIONS requests
     if (req.method === 'OPTIONS') {
