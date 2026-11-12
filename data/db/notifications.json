@@ -1,5 +1,14 @@
 [
   {
+    "id": "notif-otp-1794410940301",
+    "userId": "parimalmshete@gmail.com",
+    "title": "Email Verification Code",
+    "message": "Your verification code is 819370. Enter this 6-digit code to complete signup.",
+    "type": "account",
+    "read": false,
+    "createdAt": "2026-11-11T15:29:00.301Z"
+  },
+  {
     "id": "notif-otp-1794408557501",
     "userId": "parimalmshete@gmail.com",
     "title": "Email Verification Code",
