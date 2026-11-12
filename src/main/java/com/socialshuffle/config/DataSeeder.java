@@ -149,7 +149,21 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedParticipants() {
-        // Clean initial state: Active participant records are generated through live user registration
+        if (participantRepository.count() == 0) {
+            Participant pVarad = new Participant();
+            pVarad.setId("p-varad");
+            pVarad.setName("Varad");
+            pVarad.setEmail("varad@socialshuffle.in");
+            pVarad.setPhone("+91 98221 12345");
+            pVarad.setUsername("varad");
+            pVarad.setArea("Koregaon Park");
+            pVarad.setAvatar("https://api.dicebear.com/7.x/bottts/svg?seed=Varad");
+            pVarad.setBio("Pune board game enthusiast • Catan & Social Deduction lover!");
+            pVarad.setJoinedDate("2026-11-11");
+            pVarad.setTotalEventsAttended(0);
+            pVarad.setTotalRegistrations(0);
+            participantRepository.save(pVarad);
+        }
     }
 
     private void seedRegistrations() {

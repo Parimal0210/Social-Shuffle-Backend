@@ -5,13 +5,13 @@
     "host": "smtp.gmail.com",
     "port": 587,
     "secure": false,
-    "user": "parimalmshete@gmail.com",
-    "pass": "uychtjuqvydquncv",
-    "fromEmail": "Social Shuffle Pune <parimalmshete@gmail.com>",
+    "user": "socialshuffle.pune@gmail.com",
+    "pass": "udzoigykpnnkeuak",
+    "fromEmail": "Social Shuffle Pune <socialshuffle.pune@gmail.com>",
     "replyTo": "parimalmshete@gmail.com",
-    "lastTestedAt": "2026-11-10T13:16:53Z",
+    "lastTestedAt": "2026-11-11T15:24:10Z",
     "lastTestStatus": "success",
-    "etherealFallback": true
+    "etherealFallback": false
   },
   "whatsapp": {
     "_comment": "WhatsApp integration disabled per user instruction",

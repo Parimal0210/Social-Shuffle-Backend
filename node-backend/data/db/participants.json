@@ -1,5 +1,22 @@
 [
   {
+    "id": "p-varad",
+    "name": "Varad",
+    "email": "varad@socialshuffle.in",
+    "phone": "+91 98221 12345",
+    "password": "shuffler123",
+    "username": "varad",
+    "area": "Koregaon Park",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Varad",
+    "bio": "Pune board game enthusiast • Catan & Social Deduction lover!",
+    "joinedDate": "2026-11-11",
+    "totalEventsAttended": 0,
+    "totalRegistrations": 0,
+    "gamesPlayedIds": [],
+    "venuesVisited": [],
+    "totalPaxBrought": 0
+  },
+  {
     "id": "p-mw97kkb5",
     "name": "Aman Sharma",
     "email": "aman.sharma@example.com",
@@ -200,8 +217,12 @@
     "joinedDate": "2026-11-02",
     "totalEventsAttended": 1,
     "totalRegistrations": 1,
-    "gamesPlayedIds": ["g-cascadia"],
-    "venuesVisited": ["FC Road Social"],
+    "gamesPlayedIds": [
+      "g-cascadia"
+    ],
+    "venuesVisited": [
+      "FC Road Social"
+    ],
     "totalPaxBrought": 1,
     "password": "shuffler123",
     "username": "meera.rao"
@@ -217,8 +238,13 @@
     "joinedDate": "2026-11-04",
     "totalEventsAttended": 1,
     "totalRegistrations": 1,
-    "gamesPlayedIds": ["g-codenames", "g-justone"],
-    "venuesVisited": ["Toit Brewery"],
+    "gamesPlayedIds": [
+      "g-codenames",
+      "g-justone"
+    ],
+    "venuesVisited": [
+      "Toit Brewery"
+    ],
     "totalPaxBrought": 2,
     "password": "shuffler123",
     "username": "kunal.bapat"
@@ -234,8 +260,13 @@
     "joinedDate": "2026-11-06",
     "totalEventsAttended": 1,
     "totalRegistrations": 1,
-    "gamesPlayedIds": ["g-secrethitler", "g-avalon"],
-    "venuesVisited": ["Effingut KP"],
+    "gamesPlayedIds": [
+      "g-secrethitler",
+      "g-avalon"
+    ],
+    "venuesVisited": [
+      "Effingut KP"
+    ],
     "totalPaxBrought": 0,
     "password": "shuffler123",
     "username": "neha.mahajan"
@@ -251,8 +282,13 @@
     "joinedDate": "2026-11-07",
     "totalEventsAttended": 1,
     "totalRegistrations": 2,
-    "gamesPlayedIds": ["g-dune", "g-scythe"],
-    "venuesVisited": ["Toit Brewery"],
+    "gamesPlayedIds": [
+      "g-dune",
+      "g-scythe"
+    ],
+    "venuesVisited": [
+      "Toit Brewery"
+    ],
     "totalPaxBrought": 1,
     "password": "shuffler123",
     "username": "vikram.sen"
@@ -268,8 +304,13 @@
     "joinedDate": "2026-11-08",
     "totalEventsAttended": 1,
     "totalRegistrations": 1,
-    "gamesPlayedIds": ["g-sushigo", "g-flip7"],
-    "venuesVisited": ["FC Road Social"],
+    "gamesPlayedIds": [
+      "g-sushigo",
+      "g-flip7"
+    ],
+    "venuesVisited": [
+      "FC Road Social"
+    ],
     "totalPaxBrought": 0,
     "password": "shuffler123",
     "username": "pooja.hegde"

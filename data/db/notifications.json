@@ -1,5 +1,41 @@
 [
   {
+    "id": "notif-otp-1794408557501",
+    "userId": "parimalmshete@gmail.com",
+    "title": "Email Verification Code",
+    "message": "Your verification code is 408152. Enter this 6-digit code to complete signup.",
+    "type": "account",
+    "read": false,
+    "createdAt": "2026-11-11T14:49:17.501Z"
+  },
+  {
+    "id": "notif-otp-1794408550988",
+    "userId": "parimalmshete@gmail.com",
+    "title": "Email Verification Code",
+    "message": "Your verification code is 155252. Enter this 6-digit code to complete signup.",
+    "type": "account",
+    "read": false,
+    "createdAt": "2026-11-11T14:49:10.988Z"
+  },
+  {
+    "id": "notif-otp-1794408131333",
+    "userId": "parimalmshete@gmail.com",
+    "title": "Email Verification Code",
+    "message": "Your verification code is 371271. Enter this 6-digit code to complete signup.",
+    "type": "account",
+    "read": false,
+    "createdAt": "2026-11-11T14:42:11.333Z"
+  },
+  {
+    "id": "notif-otp-1794407983187",
+    "userId": "parimalmshete@gmail.com",
+    "title": "Email Verification Code",
+    "message": "Your verification code is 318935. Enter this 6-digit code to complete signup.",
+    "type": "account",
+    "read": false,
+    "createdAt": "2026-11-11T14:39:43.187Z"
+  },
+  {
     "id": "notif-1",
     "title": "Social Shuffle #4 Meetup This Weekend 🎲",
     "message": "Registrations are filling fast at FC Road Social. 35+ spots confirmed!",

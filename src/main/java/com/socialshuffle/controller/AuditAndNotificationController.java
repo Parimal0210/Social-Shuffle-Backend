@@ -75,4 +75,13 @@ public class AuditAndNotificationController {
         notificationRepository.saveAll(unread);
         return ResponseEntity.ok().build();
     }
+
+    @DeleteMapping("/notifications/{id}")
+    public ResponseEntity<?> deleteNotification(@PathVariable String id) {
+        if (notificationRepository.existsById(id)) {
+            notificationRepository.deleteById(id);
+            return ResponseEntity.ok().build();
+        }
+        return ResponseEntity.notFound().build();
+    }
 }
