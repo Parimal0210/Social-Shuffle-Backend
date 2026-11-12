@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import path from 'path';
@@ -42,6 +43,122 @@ async function startServer() {
   const app = express();
   // Dev server must run on port 3000 in this environment
   const PORT = 3000;
+
+  // Trust reverse proxies (Render, Cloudflare, Google Cloud Run)
+  app.set('trust proxy', 1);
+
+  // Production and preview domains for Social Shuffle Pune
+  const ALLOWED_ORIGIN_PATTERNS = [
+    /^https?:\/\/([a-zA-Z0-9-]+\.)*onrender\.com(:\d+)?$/,
+    /^https?:\/\/([a-zA-Z0-9-]+\.)*socialshufflepune\.com(:\d+)?$/,
+    /^https?:\/\/([a-zA-Z0-9-]+\.)*socialshuffle\.in(:\d+)?$/,
+    /^https?:\/\/([a-zA-Z0-9-]+\.)*run\.app(:\d+)?$/,
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+  ];
+
+  const KNOWN_ALLOWED_ORIGINS = new Set([
+    'https://social-shuffle-ps.onrender.com',
+    'http://social-shuffle-ps.onrender.com',
+    'https://socialshufflepune.com',
+    'http://socialshufflepune.com',
+    'https://www.socialshufflepune.com',
+    'http://www.socialshufflepune.com',
+    'https://socialshuffle.in',
+    'http://socialshuffle.in',
+    'https://www.socialshuffle.in',
+    'http://www.socialshuffle.in',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173'
+  ]);
+
+  const isOriginAllowed = (origin?: string): boolean => {
+    if (!origin) return true;
+    if (KNOWN_ALLOWED_ORIGINS.has(origin)) return true;
+    return ALLOWED_ORIGIN_PATTERNS.some(pattern => pattern.test(origin));
+  };
+
+  // 1. Primary Cross-Origin Resource Sharing (CORS) & Cross-Domain Headers Middleware
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+
+    res.setHeader(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
+    );
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Origin, X-Requested-With, Content-Type, Accept, Authorization, Range, X-CSRF-Token, Cache-Control, Pragma, If-Modified-Since, X-Api-Key'
+    );
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      'Content-Length, Content-Range, Content-Disposition, X-Total-Count, ETag'
+    );
+    res.setHeader('Access-Control-Max-Age', '86400');
+    res.setHeader('Vary', 'Origin, Access-Control-Request-Headers');
+
+    // Cross-Domain embedding & frame permission (allows iframe embedding across onrender.com and custom domains)
+    res.setHeader(
+      'Content-Security-Policy',
+      "frame-ancestors 'self' https://social-shuffle-ps.onrender.com https://*.onrender.com https://socialshufflepune.com https://*.socialshufflepune.com https://socialshuffle.in https://*.socialshuffle.in https://*.run.app http://localhost:*;"
+    );
+
+    // Fast-return on preflight OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
+    next();
+  });
+
+  // 2. Official cors package middleware for complete specification compliance
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        // Allow all verified origins, and permit any client to eliminate CORS blockages
+        callback(null, origin || true);
+      },
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+      allowedHeaders: [
+        'Origin',
+        'X-Requested-With',
+        'Content-Type',
+        'Accept',
+        'Authorization',
+        'Range',
+        'X-CSRF-Token',
+        'Cache-Control',
+        'Pragma',
+        'If-Modified-Since',
+        'X-Api-Key'
+      ],
+      exposedHeaders: ['Content-Length', 'Content-Range', 'Content-Disposition', 'X-Total-Count', 'ETag'],
+      maxAge: 86400
+    })
+  );
+
+  // Preflight OPTIONS wildcard
+  app.options('*', (req, res) => {
+    const origin = req.headers.origin || '*';
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    if (origin !== '*') res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Origin, X-Requested-With, Content-Type, Accept, Authorization, Range, X-CSRF-Token, Cache-Control, Pragma, If-Modified-Since, X-Api-Key'
+    );
+    res.setHeader('Access-Control-Max-Age', '86400');
+    res.status(204).end();
+  });
 
   app.use(express.json({ limit: '10mb' }));
 
