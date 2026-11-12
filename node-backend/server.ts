@@ -1523,7 +1523,6 @@ async function startServer() {
       whatsappResult: null
     });
   });
-  });
 
   // OTP Verification System with REAL Outbound Email
   interface OtpRecord {
