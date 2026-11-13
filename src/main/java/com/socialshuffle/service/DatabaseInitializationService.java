@@ -2,6 +2,7 @@ package com.socialshuffle.service;
 
 import com.socialshuffle.model.*;
 import com.socialshuffle.repository.*;
+import com.socialshuffle.security.PasswordSecurityUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -11,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Ensures all required domain tables and initial seed data exist in the database.
@@ -32,6 +34,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
     private final EventFeedbackRepository feedbackRepository;
     private final AuditLogRepository auditLogRepository;
     private final NotificationItemRepository notificationRepository;
+    private final PasswordSecurityUtil passwordSecurityUtil;
 
     public DatabaseInitializationService(AdminRepository adminRepository,
                                          UserRepository userRepository,
@@ -43,7 +46,8 @@ public class DatabaseInitializationService implements CommandLineRunner {
                                          RegistrationRepository registrationRepository,
                                          EventFeedbackRepository feedbackRepository,
                                          AuditLogRepository auditLogRepository,
-                                         NotificationItemRepository notificationRepository) {
+                                         NotificationItemRepository notificationRepository,
+                                         PasswordSecurityUtil passwordSecurityUtil) {
         this.adminRepository = adminRepository;
         this.userRepository = userRepository;
         this.participantRepository = participantRepository;
@@ -55,6 +59,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
         this.feedbackRepository = feedbackRepository;
         this.auditLogRepository = auditLogRepository;
         this.notificationRepository = notificationRepository;
+        this.passwordSecurityUtil = passwordSecurityUtil;
     }
 
     @Override
@@ -78,18 +83,20 @@ public class DatabaseInitializationService implements CommandLineRunner {
 
     private void seedAdminsIfEmpty() {
         log.info("Verifying admins table in database...");
-        adminRepository.findById("u-admin-aman").ifPresent(adminRepository::delete);
-        adminRepository.findById("u-admin-parimal-work").ifPresent(adminRepository::delete);
+        for (String legacyId : Arrays.asList("u-admin", "u-admin-aman", "u-admin-parimal-work")) {
+            adminRepository.findById(legacyId).ifPresent(adminRepository::delete);
+        }
+        adminRepository.findByEmailIgnoreCase("admin@socialshuffle.com").ifPresent(adminRepository::delete);
+        adminRepository.findByEmailIgnoreCase("diksha@socialshuffle.in").ifPresent(adminRepository::delete);
+        adminRepository.findByEmailIgnoreCase("parimal.work@gmail.com").ifPresent(adminRepository::delete);
+        adminRepository.flush();
 
-        AdminAccount parimal = adminRepository.findById("u-admin-parimal")
-                .orElseGet(() -> adminRepository.findByEmailIgnoreCase("parimalmshete@gmail.com")
-                .orElse(new AdminAccount("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", "admin123")));
-        parimal.setId("u-admin-parimal");
+        AdminAccount parimal = resolveAdminRecord("u-admin-parimal", "parimalmshete@gmail.com");
         parimal.setName("Parimal Shete");
         parimal.setEmail("parimalmshete@gmail.com");
         parimal.setPhone("+91 92849 83072");
-        if (parimal.getPassword() == null || parimal.getPassword().isEmpty()) {
-            parimal.setPassword("admin123");
+        if (parimal.getPassword() == null || parimal.getPassword().isEmpty() || !parimal.getPassword().startsWith("pbkdf2:")) {
+            parimal.setPassword(passwordSecurityUtil.hashPassword("admin123"));
         }
         parimal.setRole("admin");
         parimal.setDesignation("Co-Founder & Community Architect");
@@ -100,15 +107,12 @@ public class DatabaseInitializationService implements CommandLineRunner {
             parimal.setCreatedAt("2024-01-01T00:00:00Z");
         }
 
-        AdminAccount diksha = adminRepository.findById("u-admin-diksha")
-                .orElseGet(() -> adminRepository.findByEmailIgnoreCase("birladiksha01@gmail.com")
-                .orElse(new AdminAccount("u-admin-diksha", "Diksha", "birladiksha01@gmail.com", "+91 92849 83072", "admin123")));
-        diksha.setId("u-admin-diksha");
+        AdminAccount diksha = resolveAdminRecord("u-admin-diksha", "birladiksha01@gmail.com");
         diksha.setName("Diksha");
         diksha.setEmail("birladiksha01@gmail.com");
         diksha.setPhone("+91 92849 83072");
-        if (diksha.getPassword() == null || diksha.getPassword().isEmpty()) {
-            diksha.setPassword("admin123");
+        if (diksha.getPassword() == null || diksha.getPassword().isEmpty() || !diksha.getPassword().startsWith("pbkdf2:")) {
+            diksha.setPassword(passwordSecurityUtil.hashPassword("admin123"));
         }
         diksha.setRole("admin");
         diksha.setDesignation("Co-Founder & Experience Director");
@@ -122,31 +126,78 @@ public class DatabaseInitializationService implements CommandLineRunner {
         adminRepository.saveAll(Arrays.asList(parimal, diksha));
     }
 
+    private AdminAccount resolveAdminRecord(String canonicalId, String email) {
+        Optional<AdminAccount> byId = adminRepository.findById(canonicalId);
+        if (byId.isPresent()) {
+            return byId.get();
+        }
+        Optional<AdminAccount> byEmail = adminRepository.findByEmailIgnoreCase(email);
+        if (byEmail.isPresent()) {
+            AdminAccount stale = byEmail.get();
+            String existingPwd = stale.getPassword();
+            String createdAt = stale.getCreatedAt();
+            adminRepository.delete(stale);
+            adminRepository.flush();
+            AdminAccount fresh = new AdminAccount(canonicalId, "", email, "+91 92849 83072", existingPwd != null ? existingPwd : "");
+            fresh.setCreatedAt(createdAt);
+            return fresh;
+        }
+        return new AdminAccount(canonicalId, "", email, "+91 92849 83072", "");
+    }
+
     private void seedUsersIfEmpty() {
         log.info("Verifying admin accounts in users table...");
-        User parimalUser = userRepository.findById("u-admin-parimal")
-                .orElseGet(() -> userRepository.findByEmailIgnoreCase("parimalmshete@gmail.com")
-                .orElse(new User("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", "admin123", "admin", "Koregaon Park")));
+        for (String legacyId : Arrays.asList("u-admin", "u-admin-aman", "u-admin-parimal-work")) {
+            userRepository.findById(legacyId).ifPresent(userRepository::delete);
+        }
+        userRepository.findByEmailIgnoreCase("admin@socialshuffle.com").ifPresent(userRepository::delete);
+        userRepository.findByEmailIgnoreCase("diksha@socialshuffle.in").ifPresent(userRepository::delete);
+        userRepository.findByEmailIgnoreCase("parimal.work@gmail.com").ifPresent(userRepository::delete);
+        userRepository.flush();
+
+        User parimalUser = resolveUserRecord("u-admin-parimal", "parimalmshete@gmail.com", "Koregaon Park");
         parimalUser.setName("Parimal Shete");
         parimalUser.setEmail("parimalmshete@gmail.com");
         parimalUser.setPhone("+91 92849 83072");
+        if (parimalUser.getPassword() == null || parimalUser.getPassword().isEmpty() || !parimalUser.getPassword().startsWith("pbkdf2:")) {
+            parimalUser.setPassword(passwordSecurityUtil.hashPassword("admin123"));
+        }
         parimalUser.setRole("admin");
+        parimalUser.setArea("Koregaon Park");
         parimalUser.setAvatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
         parimalUser.setBio("Co-Founder & Community Architect at Social Shuffle");
         parimalUser.setAuthProvider("google");
 
-        User dikshaUser = userRepository.findById("u-admin-diksha")
-                .orElseGet(() -> userRepository.findByEmailIgnoreCase("birladiksha01@gmail.com")
-                .orElse(new User("u-admin-diksha", "Diksha", "birladiksha01@gmail.com", "+91 92849 83072", "admin123", "admin", "Kalyani Nagar")));
+        User dikshaUser = resolveUserRecord("u-admin-diksha", "birladiksha01@gmail.com", "Kalyani Nagar");
         dikshaUser.setName("Diksha");
         dikshaUser.setEmail("birladiksha01@gmail.com");
         dikshaUser.setPhone("+91 92849 83072");
+        if (dikshaUser.getPassword() == null || dikshaUser.getPassword().isEmpty() || !dikshaUser.getPassword().startsWith("pbkdf2:")) {
+            dikshaUser.setPassword(passwordSecurityUtil.hashPassword("admin123"));
+        }
         dikshaUser.setRole("admin");
+        dikshaUser.setArea("Kalyani Nagar");
         dikshaUser.setAvatar("https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200");
         dikshaUser.setBio("Co-Founder & Experience Director at Social Shuffle");
         dikshaUser.setAuthProvider("google");
 
         userRepository.saveAll(Arrays.asList(parimalUser, dikshaUser));
+    }
+
+    private User resolveUserRecord(String canonicalId, String email, String area) {
+        Optional<User> byId = userRepository.findById(canonicalId);
+        if (byId.isPresent()) {
+            return byId.get();
+        }
+        Optional<User> byEmail = userRepository.findByEmailIgnoreCase(email);
+        if (byEmail.isPresent()) {
+            User stale = byEmail.get();
+            String existingPwd = stale.getPassword();
+            userRepository.delete(stale);
+            userRepository.flush();
+            return new User(canonicalId, "", email, "+91 92849 83072", existingPwd != null ? existingPwd : "", "admin", area);
+        }
+        return new User(canonicalId, "", email, "+91 92849 83072", "", "admin", area);
     }
 
     private void seedParticipantsIfEmpty() {

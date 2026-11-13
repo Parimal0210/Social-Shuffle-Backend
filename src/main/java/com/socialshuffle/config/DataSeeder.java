@@ -185,7 +185,7 @@ public class DataSeeder implements CommandLineRunner {
     private void seedAuditAndNotifications() {
         if (auditLogRepository.count() == 0) {
             AuditLog log1 = new AuditLog("audit-1", "Parimal Shete", "Publish Meetup", "Event #35 created and published", "2026-09-20 10:00");
-            AuditLog log2 = new AuditLog("audit-2", "Diksha", "Security Audit", "Enabled PBKDF2 password hashing & rate limiting defense", "2026-09-25 12:00");
+            AuditLog log2 = new AuditLog("audit-2", "Diksha", "Security Audit", "Enabled cryptographic password hashing & rate limiting defense", "2026-09-25 12:00");
             auditLogRepository.saveAll(Arrays.asList(log1, log2));
         }
 

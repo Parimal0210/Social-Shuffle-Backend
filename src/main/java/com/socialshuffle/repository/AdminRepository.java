@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -13,10 +14,18 @@ public interface AdminRepository extends JpaRepository<AdminAccount, String> {
 
     Optional<AdminAccount> findByEmailIgnoreCase(String email);
 
-    Optional<AdminAccount> findByPhone(String phone);
+    Optional<AdminAccount> findFirstByPhone(String phone);
 
-    @Query("SELECT a FROM AdminAccount a WHERE (LOWER(a.email) = LOWER(:identifier) OR a.phone = :identifier) AND a.active = true")
-    Optional<AdminAccount> findActiveByIdentifier(@Param("identifier") String identifier);
+    default Optional<AdminAccount> findByPhone(String phone) {
+        return findFirstByPhone(phone);
+    }
+
+    @Query("SELECT a FROM AdminAccount a WHERE (LOWER(a.email) = LOWER(:identifier) OR a.phone = :identifier) AND a.active = true ORDER BY a.id ASC")
+    List<AdminAccount> findAllActiveByIdentifier(@Param("identifier") String identifier);
+
+    default Optional<AdminAccount> findActiveByIdentifier(String identifier) {
+        return findAllActiveByIdentifier(identifier).stream().findFirst();
+    }
 
     boolean existsByEmailIgnoreCase(String email);
 }
