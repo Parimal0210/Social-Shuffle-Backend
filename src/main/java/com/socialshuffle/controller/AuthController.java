@@ -155,8 +155,7 @@ public class AuthController {
         if (adminOpt.isPresent()) {
             AdminAccount admin = adminOpt.get();
             // Verify password using timing-safe comparison
-            boolean matches = passwordSecurityUtil.verifyPassword(inputPassword, admin.getPassword())
-                    || (inputPassword.equals("admin123") && "admin@socialshuffle.com".equalsIgnoreCase(admin.getEmail()));
+            boolean matches = !inputPassword.isEmpty() && passwordSecurityUtil.verifyPassword(inputPassword, admin.getPassword());
 
             if (!matches) {
                 rateLimitingService.recordFailedAttempt(clientIp);
@@ -168,14 +167,15 @@ public class AuthController {
             rateLimitingService.recordSuccessfulAttempt(identifier);
 
             // Details like name, role, email, avatar refer directly to the database admin table
-            User adminUser = new User("u-admin", admin.getName(), admin.getEmail(), admin.getPhone(), "", "admin", "Pune");
+            String adminUserId = admin.getId() != null ? admin.getId() : "u-admin-parimal";
+            User adminUser = new User(adminUserId, admin.getName(), admin.getEmail(), admin.getPhone(), "", "admin", "Pune");
             adminUser.setAvatar(admin.getAvatar());
             adminUser.setBio(admin.getBio() != null ? admin.getBio() : admin.getDesignation());
             adminUser.setAuthProvider("local");
             adminUser.setLoginAt(java.time.Instant.now().toString());
             adminUser.setLastActiveAt(java.time.Instant.now().toString());
 
-            String token = securityTokenService.generateToken("u-admin", "admin");
+            String token = securityTokenService.generateToken(adminUserId, "admin");
             return ResponseEntity.ok(new AuthResponse(token, adminUser, null, "Welcome back, Admin " + admin.getName()));
         }
 
@@ -201,14 +201,12 @@ public class AuthController {
 
         User user = userOpt.get();
 
-        // Check password if set
-        if (user.getPassword() != null && !user.getPassword().isEmpty() && !inputPassword.isEmpty()) {
-            boolean valid = passwordSecurityUtil.verifyPassword(inputPassword, user.getPassword());
-            if (!valid) {
-                rateLimitingService.recordFailedAttempt(clientIp);
-                rateLimitingService.recordFailedAttempt(identifier);
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Collections.singletonMap("error", "Invalid password"));
-            }
+        // Always enforce password verification
+        if (inputPassword.isEmpty() || user.getPassword() == null || user.getPassword().isEmpty()
+                || !passwordSecurityUtil.verifyPassword(inputPassword, user.getPassword())) {
+            rateLimitingService.recordFailedAttempt(clientIp);
+            rateLimitingService.recordFailedAttempt(identifier);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Collections.singletonMap("error", "Invalid email or password"));
         }
 
         rateLimitingService.recordSuccessfulAttempt(clientIp);

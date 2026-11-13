@@ -42,6 +42,8 @@ export interface GoogleUserProfile {
   phone?: string;
   area?: string;
   googleId?: string;
+  accessToken?: string;
+  idToken?: string;
 }
 
 export interface LoginCredentials {
@@ -69,6 +71,8 @@ export interface AuthResponse {
   user: AuthUser;
   participant?: Participant;
   message?: string;
+  success?: boolean;
+  rejected?: boolean;
 }
 
 export type AdminRole = 'Super Admin' | 'Event Organizer' | 'Volunteer/Staff';

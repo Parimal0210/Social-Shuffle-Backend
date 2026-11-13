@@ -99,7 +99,7 @@ public class EmailNotificationService {
                 "        <div class='pass-token'>" + qrToken + "</div>" +
                 "      </div>" +
                 "      <div style='font-size: 13px; color: #94a3b8; text-align: center;'>" +
-                "        Questions, panic, or game requests? Reply right here or ping Aman / Parimal on WhatsApp!<br/>" +
+                "        Questions, panic, or game requests? Reply right here or ping Parimal / Diksha (+91 92849 83072) on WhatsApp!<br/>" +
                 "        See you at the tables! 🚀" +
                 "      </div>" +
                 "    </div>" +

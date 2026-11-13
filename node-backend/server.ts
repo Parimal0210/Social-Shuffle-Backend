@@ -3,6 +3,7 @@ import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { BADGE_LEVELS, calculateBadgeLevel } from './src/services/badgeBackendService';
 import {
   INITIAL_EVENTS,
@@ -44,7 +45,8 @@ async function startServer() {
   // Dev server must run on port 3000 in this environment
   const PORT = 3000;
 
-  // Trust reverse proxies (Render, Cloudflare, Google Cloud Run)
+  // Hide Express server fingerprint & trust reverse proxies
+  app.disable('x-powered-by');
   app.set('trust proxy', 1);
 
   // Production and preview domains for Social Shuffle Pune
@@ -108,6 +110,12 @@ async function startServer() {
     // Remove any restrictive framing headers so Google AI Studio preview iframe and custom domains can embed smoothly
     res.removeHeader('X-Frame-Options');
 
+    // Defensive HTTP security headers
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+    res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+
     // Fast-return on preflight OPTIONS requests
     if (req.method === 'OPTIONS') {
       return res.status(204).end();
@@ -157,7 +165,87 @@ async function startServer() {
     res.status(204).end();
   });
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '5mb' }));
+
+  // Prevent browser/proxy caching of sensitive API responses
+  app.use(['/api/auth', '/api/admins', '/api/communications', '/api/participants', '/api/payments'], (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    next();
+  });
+
+  // --- Sliding-Window Rate Limiter ---
+  const rateLimitBuckets = new Map<string, number[]>();
+  const createRateLimiter = (windowMs: number, maxRequests: number, keyPrefix: string) => {
+    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
+      const bucketKey = `${keyPrefix}:${clientIp}`;
+      const now = Date.now();
+      const windowStart = now - windowMs;
+      const timestamps = (rateLimitBuckets.get(bucketKey) || []).filter(ts => ts > windowStart);
+
+      if (timestamps.length >= maxRequests) {
+        const retryAfterSec = Math.max(1, Math.ceil((timestamps[0] + windowMs - now) / 1000));
+        res.setHeader('Retry-After', String(retryAfterSec));
+        return res.status(429).json({
+          success: false,
+          message: 'Too many requests. Please slow down and try again shortly.'
+        });
+      }
+
+      timestamps.push(now);
+      rateLimitBuckets.set(bucketKey, timestamps);
+      next();
+    };
+  };
+
+  // Periodically prune stale rate-limit buckets to avoid memory growth
+  setInterval(() => {
+    const cutoff = Date.now() - 15 * 60 * 1000;
+    for (const [key, list] of rateLimitBuckets.entries()) {
+      const active = list.filter(ts => ts > cutoff);
+      if (active.length === 0) rateLimitBuckets.delete(key);
+      else rateLimitBuckets.set(key, active);
+    }
+  }, 5 * 60 * 1000).unref();
+
+  app.use('/api', createRateLimiter(60 * 1000, 400, 'api_global'));
+  app.use('/api/auth', createRateLimiter(15 * 60 * 1000, 60, 'api_auth'));
+  app.use('/api/payments', createRateLimiter(15 * 60 * 1000, 40, 'api_payments'));
+
+  // --- Prototype Pollution & XSS Sanitization Middleware ---
+  const SECRET_FIELD_KEYS = new Set(['password', 'keySecret', 'pass', 'accessToken', 'idToken', 'token', 'razorpaySignature']);
+  const sanitizePayloadValue = (val: any, keyName?: string, depth: number = 0): any => {
+    if (depth > 12 || val === null || val === undefined) return val;
+    if (typeof val === 'string') {
+      if (keyName && SECRET_FIELD_KEYS.has(keyName)) return val;
+      if (val.startsWith('data:image/')) return val;
+      return val
+        .replace(/\0/g, '')
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/javascript:/gi, '')
+        .replace(/\bon\w+\s*=/gi, '');
+    }
+    if (Array.isArray(val)) {
+      return val.map(item => sanitizePayloadValue(item, undefined, depth + 1));
+    }
+    if (typeof val === 'object') {
+      const cleanObj: Record<string, any> = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+        cleanObj[k] = sanitizePayloadValue(v, k, depth + 1);
+      }
+      return cleanObj;
+    }
+    return val;
+  };
+
+  app.use('/api', (req, _res, next) => {
+    if (req.body && typeof req.body === 'object') {
+      req.body = sanitizePayloadValue(req.body);
+    }
+    next();
+  });
 
   // --- Database Storage Directory Setup ---
   const DATA_DIR = path.resolve(process.cwd(), 'src/data/db');
@@ -286,6 +374,147 @@ async function startServer() {
     } catch {}
   };
 
+  // --- Cryptographic Password Hashing (PBKDF2-HMAC-SHA512) & Signed Sessions ---
+  const PBKDF2_ITERATIONS = 100000;
+  const PBKDF2_KEYLEN = 64;
+  const PBKDF2_DIGEST = 'sha512';
+  const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+  const SESSION_SECRET_PATH = path.join(DATA_DIR, '.session_secret');
+  const loadSessionSecret = (): string => {
+    if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 32) {
+      return process.env.SESSION_SECRET;
+    }
+    try {
+      if (fs.existsSync(SESSION_SECRET_PATH)) {
+        const stored = fs.readFileSync(SESSION_SECRET_PATH, 'utf-8').trim();
+        if (stored.length >= 32) return stored;
+      }
+      const generated = crypto.randomBytes(48).toString('hex');
+      fs.writeFileSync(SESSION_SECRET_PATH, generated, { encoding: 'utf-8', mode: 0o600 });
+      return generated;
+    } catch {
+      return crypto.randomBytes(48).toString('hex');
+    }
+  };
+  const SESSION_SECRET = loadSessionSecret();
+  const revokedTokenIds = new Set<string>();
+
+  const hashPassword = (plainText: string): string => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const derived = crypto.pbkdf2Sync(plainText, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST).toString('hex');
+    return `pbkdf2_sha512$${PBKDF2_ITERATIONS}$${salt}$${derived}`;
+  };
+
+  const verifyPassword = (plainText: string, storedHashOrPlain?: string | null): boolean => {
+    if (!plainText || !storedHashOrPlain) return false;
+    if (storedHashOrPlain.startsWith('pbkdf2_sha512$')) {
+      const parts = storedHashOrPlain.split('$');
+      if (parts.length !== 4) return false;
+      const iterations = parseInt(parts[1], 10);
+      const salt = parts[2];
+      const expectedHex = parts[3];
+      if (!iterations || !salt || !expectedHex) return false;
+      const derivedBuf = crypto.pbkdf2Sync(plainText, salt, iterations, PBKDF2_KEYLEN, PBKDF2_DIGEST);
+      const expectedBuf = Buffer.from(expectedHex, 'hex');
+      if (derivedBuf.length !== expectedBuf.length) return false;
+      return crypto.timingSafeEqual(derivedBuf, expectedBuf);
+    }
+    const a = Buffer.from(plainText);
+    const b = Buffer.from(storedHashOrPlain);
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  };
+
+  interface SessionTokenPayload {
+    sub: string;
+    email: string;
+    role: 'admin' | 'participant';
+    participantId?: string;
+    iat: number;
+    exp: number;
+    jti: string;
+  }
+
+  const issueSessionToken = (user: { id: string; email: string; role: 'admin' | 'participant'; participantId?: string }): string => {
+    const now = Date.now();
+    const payload: SessionTokenPayload = {
+      sub: user.id,
+      email: user.email.trim().toLowerCase(),
+      role: user.role,
+      participantId: user.participantId,
+      iat: now,
+      exp: now + SESSION_TTL_MS,
+      jti: crypto.randomBytes(12).toString('hex')
+    };
+    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const sig = crypto.createHmac('sha256', SESSION_SECRET).update(encodedPayload).digest('base64url');
+    return `${encodedPayload}.${sig}`;
+  };
+
+  const verifySessionToken = (token?: string | null): SessionTokenPayload | null => {
+    if (!token || typeof token !== 'string') return null;
+    const parts = token.trim().split('.');
+    if (parts.length !== 2) return null;
+    const [encodedPayload, sig] = parts;
+    try {
+      const expectedSig = crypto.createHmac('sha256', SESSION_SECRET).update(encodedPayload).digest('base64url');
+      const sigBuf = Buffer.from(sig);
+      const expectedBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+        return null;
+      }
+      const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf-8')) as SessionTokenPayload;
+      if (!payload || !payload.sub || !payload.email || !payload.role || !payload.exp) return null;
+      if (Date.now() > payload.exp) return null;
+      if (payload.jti && revokedTokenIds.has(payload.jti)) return null;
+      return payload;
+    } catch {
+      return null;
+    }
+  };
+
+  // Sanitizers: ensure passwords & password hashes never leave server memory
+  const sanitizeRecord = <T extends Record<string, any>>(rec: T): Omit<T, 'password' | 'passwordHash'> => {
+    if (!rec || typeof rec !== 'object') return rec as any;
+    const { password: _p, passwordHash: _ph, ...safe } = rec;
+    return safe;
+  };
+
+  // Migrate admins store: remove Aman Joshi, enforce +91 92849 83072, and hash admin credentials with PBKDF2
+  const defaultAdminSeedPass = process.env.ADMIN_DEFAULT_PASSWORD || 'admin123';
+  const cleanedAdmins = dbAdmins
+    .getAll()
+    .filter((a: any) => a && a.id !== 'u-admin-aman' && String(a.email || '').trim().toLowerCase() !== 'admin@socialshuffle.com')
+    .map((a: any) => {
+      const { password, ...rest } = a;
+      return {
+        ...rest,
+        phone: '+91 92849 83072',
+        passwordHash: a.passwordHash && String(a.passwordHash).startsWith('pbkdf2_sha512$')
+          ? a.passwordHash
+          : hashPassword(password || defaultAdminSeedPass)
+      };
+    });
+  dbAdmins.setAll(cleanedAdmins.length > 0 ? cleanedAdmins : INITIAL_ADMINS.map(a => ({ ...a, passwordHash: hashPassword(defaultAdminSeedPass) })) as any);
+
+  // Migrate participants store: convert any legacy plaintext passwords into salted PBKDF2 hashes
+  const migratedParticipants = dbParticipants.getAll().map((p: any) => {
+    if (p.password || !p.passwordHash) {
+      const plain = p.password || 'shuffler123';
+      const { password: _removed, ...rest } = p;
+      return { ...rest, passwordHash: hashPassword(plain) };
+    }
+    return p;
+  });
+  dbParticipants.setAll(migratedParticipants);
+
+  // Strip any historical OTP codes from persisted public notifications
+  const cleanedNotifs = dbNotifications.getAll().filter((n: any) => n && !String(n.id || '').startsWith('notif-otp-'));
+  if (cleanedNotifs.length !== dbNotifications.getAll().length) {
+    dbNotifications.setAll(cleanedNotifs);
+  }
+
   // Helper to find admin by email or phone
   const findAdminByEmailOrPhone = (ident: string) => {
     const clean = String(ident).trim().toLowerCase();
@@ -303,6 +532,100 @@ async function startServer() {
       }
     }
     return undefined;
+  };
+
+  // Attach verified session identity to req.authUser
+  const attachAuth = (req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    const authHeader = String(req.headers.authorization || '');
+    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const tokenData = verifySessionToken(bearer);
+    if (tokenData) {
+      if (tokenData.role === 'admin') {
+        const admin = dbAdmins.getAll().find((a: any) => a.active && a.email?.trim().toLowerCase() === tokenData.email);
+        if (admin) {
+          (req as any).authUser = { ...tokenData, adminRecord: admin };
+        }
+      } else {
+        (req as any).authUser = tokenData;
+      }
+    }
+    next();
+  };
+
+  app.use('/api', attachAuth);
+
+  const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!(req as any).authUser) {
+      return res.status(401).json({ success: false, message: 'Authentication required.' });
+    }
+    next();
+  };
+
+  const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authUser = (req as any).authUser as SessionTokenPayload | undefined;
+    if (!authUser) {
+      return res.status(401).json({ success: false, message: 'Administrator authentication required.' });
+    }
+    if (authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Administrator privileges required.' });
+    }
+    next();
+  };
+
+  // Cryptographically verify Google ID token or OAuth access token against Google servers
+  const verifyGoogleProof = async (opts: { idToken?: string; accessToken?: string; expectedEmail: string }): Promise<{
+    verified: boolean;
+    email?: string;
+    name?: string;
+    avatar?: string;
+    googleId?: string;
+    reason?: string;
+  }> => {
+    const cleanExpected = opts.expectedEmail.trim().toLowerCase();
+
+    if (opts.idToken && typeof opts.idToken === 'string') {
+      try {
+        const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(opts.idToken)}`);
+        if (resp.ok) {
+          const info: any = await resp.json();
+          const tokenEmail = String(info.email || '').trim().toLowerCase();
+          const isEmailVerified = info.email_verified === true || info.email_verified === 'true';
+          if (tokenEmail && isEmailVerified && tokenEmail === cleanExpected) {
+            return {
+              verified: true,
+              email: tokenEmail,
+              name: info.name,
+              avatar: info.picture,
+              googleId: info.sub
+            };
+          }
+        }
+      } catch {}
+    }
+
+    if (opts.accessToken && typeof opts.accessToken === 'string') {
+      try {
+        const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${opts.accessToken}` }
+        });
+        if (resp.ok) {
+          const info: any = await resp.json();
+          const tokenEmail = String(info.email || '').trim().toLowerCase();
+          const isEmailVerified = info.email_verified !== false;
+          if (tokenEmail && isEmailVerified && tokenEmail === cleanExpected) {
+            return {
+              verified: true,
+              email: tokenEmail,
+              name: info.name,
+              avatar: info.picture,
+              googleId: info.sub
+            };
+          }
+        }
+      } catch {}
+    }
+
+    return { verified: false, reason: 'Invalid or missing Google verification token' };
   };
 
   // ==========================================
@@ -331,16 +654,16 @@ async function startServer() {
   });
 
   // ==========================================
-  // ADMINS & AUTHENTICATION (ALL DETAILS)
+  // ADMINS & AUTHENTICATION (ROLE PROTECTED)
   // ==========================================
-  app.get('/api/admins', (_req, res) => {
+  app.get('/api/admins', requireAdmin, (_req, res) => {
     res.json({
       success: true,
-      admins: dbAdmins.getAll()
+      admins: dbAdmins.getAll().map(sanitizeRecord)
     });
   });
 
-  app.get('/api/admins/check', (req, res) => {
+  app.get('/api/admins/check', requireAdmin, (req, res) => {
     const query = String(req.query.email || req.query.phone || req.query.identifier || '').trim();
     if (!query) {
       return res.status(400).json({ success: false, message: 'Query is required' });
@@ -350,7 +673,7 @@ async function startServer() {
       return res.json({
         success: true,
         isAdmin: true,
-        admin
+        admin: sanitizeRecord(admin)
       });
     }
     return res.json({
@@ -359,12 +682,10 @@ async function startServer() {
     });
   });
 
-  // Direct Login: Unified regular login system for both Participants and Administrators
-  // Admin is identified by matching all possible details (Name, Email, Phone) combined with admins table
+  // Direct Login: Authenticates Administrators and Participants with PBKDF2 verification + HMAC token
   app.post('/api/auth/login', (req, res) => {
     const { emailOrPhone, password, name, phone, email, designation } = req.body;
-    
-    // Normalize input fields
+
     const inputEmail = String(email || (emailOrPhone && String(emailOrPhone).includes('@') ? emailOrPhone : '')).trim().toLowerCase();
     const inputPhone = String(phone || (!String(emailOrPhone || '').includes('@') ? emailOrPhone : '')).trim();
     const inputPhoneDigits = inputPhone.replace(/[^0-9]/g, '');
@@ -372,86 +693,63 @@ async function startServer() {
     const cleanIdent = String(emailOrPhone || inputEmail || inputPhone).trim().toLowerCase();
 
     if (!cleanIdent && !inputEmail && !inputPhoneDigits) {
-      return res.status(400).json({ success: false, message: 'Email address or mobile phone number is required' });
+      return res.status(400).json({ success: false, message: 'Email address or mobile phone number is required.' });
+    }
+    if (!password || typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({ success: false, message: 'Password is required.' });
     }
 
-    // --- ADMIN IDENTIFICATION: MATCH ALL POSSIBLE DETAILS COMBINED ---
-    // Rule: Must match all details (Full Name, Registered Email, Mobile Phone) combined in admins table in database!
-    // Not only name or not only email!
-    let matchedAdmin: any = null;
-    let partialAdminMatch: any = null;
-    let missingAdminDetails: string[] = [];
+    // Check if email matches an active Administrator (Parimal or Diksha)
+    const adminMatch: any = dbAdmins.getAll().find((a: any) => {
+      if (!a.active) return false;
+      const aEmail = (a.email || '').trim().toLowerCase();
+      return Boolean(inputEmail && aEmail === inputEmail) || aEmail === cleanIdent;
+    });
 
-    for (const admin of dbAdmins.getAll()) {
-      if (!admin.active) continue;
-      const adminEmail = (admin.email || '').trim().toLowerCase();
-      const adminName = (admin.name || '').trim().toLowerCase();
-      const adminPhoneDigits = (admin.phone || '').replace(/[^0-9]/g, '');
-
-      const emailMatches = Boolean(inputEmail && adminEmail && inputEmail === adminEmail);
-      const phoneMatches = Boolean(
-        inputPhoneDigits.length >= 10 &&
-        adminPhoneDigits.length >= 10 &&
-        (adminPhoneDigits.includes(inputPhoneDigits) || inputPhoneDigits.includes(adminPhoneDigits))
-      );
-      const nameMatches = Boolean(
-        inputName &&
-        adminName &&
-        (adminName === inputName || adminName.includes(inputName) || inputName.includes(adminName))
-      );
-
-      // ALL COMBINED MATCH: Name + Email + Phone must all match!
-      if (emailMatches && phoneMatches && nameMatches) {
-        matchedAdmin = admin;
-        break;
+    if (adminMatch) {
+      // Optional identity cross-checks if caller provided extra fields
+      if (inputName) {
+        const aName = (adminMatch.name || '').trim().toLowerCase();
+        if (!(aName === inputName || aName.includes(inputName) || inputName.includes(aName))) {
+          return res.status(401).json({ success: false, message: 'Invalid administrator credentials.' });
+        }
+      }
+      if (!verifyPassword(password, adminMatch.passwordHash || adminMatch.password)) {
+        return res.status(401).json({ success: false, message: 'Invalid email or password.' });
       }
 
-      // Check for partial match to provide guidance or prevent unauthorized admin escalation
-      if (emailMatches || phoneMatches || (inputName && nameMatches)) {
-        partialAdminMatch = admin;
-        missingAdminDetails = [
-          !nameMatches ? 'Full Name' : null,
-          !emailMatches ? 'Registered Email' : null,
-          !phoneMatches ? 'Mobile Phone' : null
-        ].filter(Boolean) as string[];
-      }
-    }
-
-    // If ALL details match combined: Authenticate as Administrator with full clearance!
-    if (matchedAdmin) {
       const nowIso = new Date().toISOString();
       const adminUser = {
-        id: matchedAdmin.id,
-        name: matchedAdmin.name,
-        email: matchedAdmin.email,
-        phone: matchedAdmin.phone || '+91 98220 99887',
-        role: 'admin',
-        designation: designation?.trim() || matchedAdmin.designation,
+        id: adminMatch.id,
+        name: adminMatch.name,
+        email: adminMatch.email,
+        phone: adminMatch.phone || '+91 92849 83072',
+        role: 'admin' as const,
+        designation: designation?.trim() || adminMatch.designation,
         adminRole: 'Super Admin',
         status: 'Active Verified Administrator',
-        joinedDate: matchedAdmin.createdAt || '2024-01-01',
+        joinedDate: adminMatch.createdAt || '2024-01-01',
         permissions: ['events', 'attendance', 'crm', 'games', 'broadcasts', 'finance', 'reports', 'settings', 'audit'],
-        area: matchedAdmin.area || 'Koregaon Park, Pune',
-        bio: matchedAdmin.bio || `${matchedAdmin.designation} • Social Shuffle Organizer`,
-        avatar: matchedAdmin.avatar,
+        area: adminMatch.area || 'Koregaon Park, Pune',
+        bio: adminMatch.bio || `${adminMatch.designation} • Social Shuffle Organizer`,
+        avatar: adminMatch.avatar,
         authProvider: 'local',
         loginAt: nowIso,
         lastActiveAt: nowIso
       };
 
-      console.log(`[Auth DB] Administrator verified by ALL combined details: ${adminUser.name} (${adminUser.email}, ${adminUser.phone}, ${adminUser.designation})`);
-
+      const token = issueSessionToken({ id: adminUser.id, email: adminUser.email, role: 'admin' });
       return res.json({
         success: true,
         message: `Welcome back, Admin ${adminUser.name}! (${adminUser.designation})`,
-        token: `tok_admin_${matchedAdmin.id}_${Date.now()}`,
+        token,
         user: adminUser
       });
     }
 
-    // Participant login lookup (by email, phone, or username)
+    // Participant login lookup
     const cleanDigits = inputPhoneDigits || cleanIdent.replace(/[^0-9]/g, '');
-    const participant = dbParticipants.getAll().find(p => {
+    const participant: any = dbParticipants.getAll().find(p => {
       const pEmail = (p.email || '').trim().toLowerCase();
       const pPhone = (p.phone || '').replace(/[^0-9]/g, '');
       const pUsername = (p.username || pEmail.split('@')[0] || '').toLowerCase();
@@ -464,9 +762,8 @@ async function startServer() {
     });
 
     if (participant) {
-      // If password was sent, check against participant's stored password (defaulting to 'shuffler123' if not yet set)
-      const expectedPassword = participant.password || 'shuffler123';
-      if (password && password.trim().length > 0 && participant.password && participant.password !== password) {
+      const storedCredential = participant.passwordHash || participant.password;
+      if (!verifyPassword(password, storedCredential)) {
         return res.status(401).json({
           success: false,
           message: 'Invalid password. Please check your credentials and try again.'
@@ -479,7 +776,7 @@ async function startServer() {
         name: participant.name,
         email: participant.email,
         phone: participant.phone,
-        role: 'participant',
+        role: 'participant' as const,
         area: participant.area,
         avatar: participant.avatar,
         bio: participant.bio,
@@ -488,19 +785,18 @@ async function startServer() {
         loginAt: nowIso,
         lastActiveAt: nowIso
       };
+      const token = issueSessionToken({
+        id: user.id,
+        email: user.email,
+        role: 'participant',
+        participantId: participant.id
+      });
       return res.json({
         success: true,
         message: `Welcome back, ${participant.name}!`,
-        token: `tok_part_${participant.id}_${Date.now()}`,
+        token,
         user,
-        participant
-      });
-    }
-
-    if (partialAdminMatch && missingAdminDetails.length > 0) {
-      return res.status(401).json({
-        success: false,
-        message: `Administrator identification requires ALL details (Full Name, Registered Email, and Mobile Phone) to match the database combined. Missing or mismatched: ${missingAdminDetails.join(', ')}.`
+        participant: sanitizeRecord(participant)
       });
     }
 
@@ -510,7 +806,7 @@ async function startServer() {
     });
   });
 
-  // Participant Registration: Stores credentials so participant can login henceforth
+  // Participant Registration: Requires server-verified Email OTP & stores salted PBKDF2 hash
   app.post('/api/auth/register', (req, res) => {
     const data = req.body;
     if (!data.name || !data.email || !data.phone) {
@@ -519,33 +815,55 @@ async function startServer() {
 
     const emailClean = String(data.email).trim().toLowerCase();
     const phoneClean = String(data.phone).trim();
-    const phoneDigits = phoneClean.replace(/[^0-9]/g, '');
+    const phoneDigits = phoneClean.replace(/[^0-9]/g, '').slice(-10);
+
+    // Block reserving admin email or admin phone number
+    if (
+      emailClean.includes('admin@') ||
+      phoneDigits === '9284983072' ||
+      dbAdmins.getAll().some((a: any) => a.email?.trim().toLowerCase() === emailClean)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Administrator accounts cannot be self-registered.'
+      });
+    }
+
+    // Require email OTP verification completed on server
+    if (!verifiedEmails.has(emailClean)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Email address must be verified with the 6-digit OTP code before registering.'
+      });
+    }
 
     const existing = dbParticipants.getAll().find(p => {
       const pEmail = (p.email || '').trim().toLowerCase();
-      const pPhone = (p.phone || '').replace(/[^0-9]/g, '');
+      const pPhone = (p.phone || '').replace(/[^0-9]/g, '').slice(-10);
       return pEmail === emailClean || (phoneDigits.length >= 10 && pPhone === phoneDigits);
     });
 
     if (existing) {
-      if (data.password) {
-        dbParticipants.update(existing.id, { password: data.password });
-      }
-      return res.status(400).json({ success: false, message: 'An account with this email or phone already exists. Please sign in.' });
+      return res.status(409).json({ success: false, message: 'An account with this email or phone already exists. Please sign in.' });
     }
 
-    const newId = data.id || `p-${Date.now().toString(36)}`;
-    const newParticipant = {
+    const rawPassword = String(data.password || '').trim();
+    if (rawPassword.length > 0 && rawPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long.' });
+    }
+
+    const newId = `p-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
+    const newParticipant: any = {
       id: newId,
       name: String(data.name).trim(),
       email: emailClean,
       phone: phoneClean,
-      password: data.password || 'shuffler123',
+      passwordHash: hashPassword(rawPassword || crypto.randomBytes(16).toString('hex')),
       username: emailClean.split('@')[0],
       area: data.area || 'Koregaon Park',
       avatar: data.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(data.name)}`,
       bio: data.bio || 'Board game lover eager to play!',
-      joinedDate: data.joinedDate || new Date().toISOString().slice(0, 10),
+      joinedDate: new Date().toISOString().slice(0, 10),
       totalEventsAttended: 0,
       totalRegistrations: 0,
       gamesPlayedIds: [],
@@ -554,6 +872,7 @@ async function startServer() {
     };
 
     dbParticipants.insert(newParticipant);
+    verifiedEmails.delete(emailClean);
 
     const nowIso = new Date().toISOString();
     const user = {
@@ -561,7 +880,7 @@ async function startServer() {
       name: newParticipant.name,
       email: newParticipant.email,
       phone: newParticipant.phone,
-      role: 'participant',
+      role: 'participant' as const,
       area: newParticipant.area,
       avatar: newParticipant.avatar,
       bio: newParticipant.bio,
@@ -571,7 +890,12 @@ async function startServer() {
       lastActiveAt: nowIso
     };
 
-    console.log(`[Auth DB] Registered new participant with credentials: ${newParticipant.name} (${newParticipant.email})`);
+    const token = issueSessionToken({
+      id: user.id,
+      email: user.email,
+      role: 'participant',
+      participantId: newId
+    });
 
     // Dispatch official Welcome Email to new participant
     if (newParticipant.email) {
@@ -582,45 +906,37 @@ async function startServer() {
           subject: `🎲 Welcome to Social Shuffle Pune, ${newParticipant.name}!`,
           html: welcomeHtml,
           text: `Welcome to Social Shuffle Pune, ${newParticipant.name}! We're thrilled to have you in our board game community.`
-        }).then(mailRes => {
-          console.log(`[Welcome Mail] Sent to ${newParticipant.email}:`, mailRes.success ? 'Delivered' : mailRes.error);
         }).catch(err => console.warn('[Welcome Mail Error]', err));
-      } catch (e) {
-        console.warn('[Welcome Mail Template Error]', e);
-      }
+      } catch {}
     }
 
     return res.status(201).json({
       success: true,
       message: `Registration successful! Welcome to Social Shuffle, ${newParticipant.name}!`,
-      token: `tok_part_${newId}_${Date.now()}`,
+      token,
       user,
-      participant: newParticipant
+      participant: sanitizeRecord(newParticipant)
     });
   });
 
-  // Google Login: returns all details for admin or participant
-  app.post('/api/auth/google/login', (req, res) => {
-    const { email } = req.body;
+  // Google Login: Cryptographically verifies Google ID/Access Token before issuing session token
+  app.post('/api/auth/google/login', async (req, res) => {
+    const { email, idToken, accessToken } = req.body;
     if (!email) {
       return res.status(400).json({ success: false, message: 'Email is required' });
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
-    const cleanName = String(req.body.name || '').trim().toLowerCase();
-    const record = registeredGoogleUsers.get(cleanEmail);
-
-    let adminCheck: any = null;
-    for (const admin of dbAdmins.getAll()) {
-      if (!admin.active) continue;
-      const adminEmail = (admin.email || '').trim().toLowerCase();
-      const adminName = (admin.name || '').trim().toLowerCase();
-      // Verify both email and name match combined
-      if (cleanEmail === adminEmail && (!cleanName || adminName === cleanName || adminName.includes(cleanName) || cleanName.includes(adminName))) {
-        adminCheck = admin;
-        break;
-      }
+    const proof = await verifyGoogleProof({ idToken, accessToken, expectedEmail: cleanEmail });
+    if (!proof.verified) {
+      return res.status(401).json({
+        success: false,
+        code: 'GOOGLE_VERIFICATION_FAILED',
+        message: 'Google authentication token could not be verified. Please sign in with Google again.'
+      });
     }
+
+    const adminCheck: any = dbAdmins.getAll().find((a: any) => a.active && (a.email || '').trim().toLowerCase() === cleanEmail);
 
     if (adminCheck && adminCheck.role === 'admin') {
       const nowIso = new Date().toISOString();
@@ -628,8 +944,8 @@ async function startServer() {
         id: adminCheck.id,
         name: adminCheck.name,
         email: adminCheck.email,
-        phone: adminCheck.phone || '+91 98220 99887',
-        role: 'admin',
+        phone: adminCheck.phone || '+91 92849 83072',
+        role: 'admin' as const,
         designation: adminCheck.designation,
         adminRole: 'Super Admin',
         status: 'Active Verified Administrator',
@@ -637,25 +953,23 @@ async function startServer() {
         permissions: ['events', 'attendance', 'crm', 'games', 'broadcasts', 'finance', 'reports', 'settings', 'audit'],
         area: adminCheck.area || 'Koregaon Park, Pune',
         bio: adminCheck.bio || `${adminCheck.designation} • Social Shuffle Organizer`,
-        avatar: adminCheck.avatar,
+        avatar: proof.avatar || adminCheck.avatar,
         authProvider: 'google',
         loginAt: nowIso,
         lastActiveAt: nowIso
       };
 
-      console.log(`[Google Auth DB] Admin verified with all details: ${adminUser.name} (${adminUser.email})`);
-
+      const token = issueSessionToken({ id: adminUser.id, email: adminUser.email, role: 'admin' });
       return res.json({
         success: true,
         message: `Welcome back, Admin ${adminCheck.name}! (${adminCheck.designation})`,
-        token: `tok_admin_g_${adminCheck.id}`,
-        user: adminUser,
-        participant: record?.participant
+        token,
+        user: adminUser
       });
     }
 
+    const record = registeredGoogleUsers.get(cleanEmail);
     if (!record) {
-      // Check if participant exists in dbParticipants by email (e.g. registered via Email OTP form)
       const existingParticipant = dbParticipants.getAll().find(
         (p: any) => p.email && String(p.email).trim().toLowerCase() === cleanEmail
       );
@@ -674,10 +988,10 @@ async function startServer() {
         name: existingParticipant.name,
         email: cleanEmail,
         phone: existingParticipant.phone,
-        role: 'participant',
+        role: 'participant' as const,
         area: existingParticipant.area,
         participantId: existingParticipant.id,
-        avatar: req.body.avatar || existingParticipant.avatar,
+        avatar: proof.avatar || req.body.avatar || existingParticipant.avatar,
         bio: existingParticipant.bio,
         authProvider: 'google',
         loginAt: nowIso,
@@ -686,19 +1000,26 @@ async function startServer() {
 
       registeredGoogleUsers.set(cleanEmail, {
         email: cleanEmail,
-        googleId: req.body.googleId || `g_${cleanEmail}`,
-        participant: existingParticipant,
+        googleId: proof.googleId || req.body.googleId || `g_${cleanEmail}`,
+        participant: sanitizeRecord(existingParticipant),
         user: restoredUser,
         registeredAt: existingParticipant.joinedDate || nowIso
       });
       saveGoogleUsers();
 
+      const token = issueSessionToken({
+        id: restoredUser.id,
+        email: cleanEmail,
+        role: 'participant',
+        participantId: existingParticipant.id
+      });
+
       return res.json({
         success: true,
         message: `Welcome back, ${restoredUser.name}!`,
-        token: `tok_g_${restoredUser.id}`,
+        token,
         user: restoredUser,
-        participant: existingParticipant
+        participant: sanitizeRecord(existingParticipant)
       });
     }
 
@@ -708,25 +1029,70 @@ async function startServer() {
     record.user.role = 'participant';
     saveGoogleUsers();
 
+    const token = issueSessionToken({
+      id: record.user.id,
+      email: cleanEmail,
+      role: 'participant',
+      participantId: record.participant?.id
+    });
+
     res.json({
       success: true,
       message: `Welcome back, ${record.user.name}!`,
-      token: `tok_g_${record.user.id}`,
+      token,
       user: record.user,
-      participant: record.participant
+      participant: sanitizeRecord(record.participant)
     });
   });
 
-  // Google Sign-Up
-  app.post('/api/auth/google/signup', (req, res) => {
-    const { email, name, avatar, phone, area, bio, googleId } = req.body;
+  // Google Sign-Up: Cryptographically verifies Google token before registering
+  app.post('/api/auth/google/signup', async (req, res) => {
+    const { email, name, avatar, phone, area, bio, googleId, idToken, accessToken } = req.body;
     if (!email || !name) {
       return res.status(400).json({ success: false, message: 'Email and name are required' });
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
-    const cleanName = String(name).trim();
+    const proof = await verifyGoogleProof({ idToken, accessToken, expectedEmail: cleanEmail });
+    if (!proof.verified) {
+      return res.status(401).json({
+        success: false,
+        code: 'GOOGLE_VERIFICATION_FAILED',
+        message: 'Google authentication token could not be verified. Please try again.'
+      });
+    }
+
+    const cleanName = String(proof.name || name).trim();
     const nowIso = new Date().toISOString();
+
+    const adminCheck: any = findAdminByEmailOrPhone(cleanEmail);
+    if (adminCheck && adminCheck.role === 'admin') {
+      const adminUser = {
+        id: adminCheck.id,
+        name: adminCheck.name,
+        email: cleanEmail,
+        phone: adminCheck.phone || '+91 92849 83072',
+        role: 'admin' as const,
+        designation: adminCheck.designation,
+        adminRole: 'Super Admin',
+        status: 'Active Verified Administrator',
+        joinedDate: adminCheck.createdAt || '2024-01-01',
+        permissions: ['events', 'attendance', 'crm', 'games', 'broadcasts', 'finance', 'reports', 'settings', 'audit'],
+        area: adminCheck.area || 'Koregaon Park, Pune',
+        avatar: proof.avatar || adminCheck.avatar,
+        bio: adminCheck.bio,
+        authProvider: 'google',
+        loginAt: nowIso,
+        lastActiveAt: nowIso
+      };
+      const token = issueSessionToken({ id: adminUser.id, email: cleanEmail, role: 'admin' });
+      return res.json({
+        success: true,
+        message: `Welcome back, Admin ${adminUser.name}!`,
+        token,
+        user: adminUser
+      });
+    }
 
     const existingParticipant = dbParticipants.getAll().find(
       (p: any) => p.email && String(p.email).trim().toLowerCase() === cleanEmail
@@ -735,20 +1101,20 @@ async function startServer() {
     const participantId = existingParticipant?.id || `p-google-${Date.now().toString(36)}`;
     const userId = `u-${participantId}`;
 
-    const participant = existingParticipant
+    const participant: any = existingParticipant
       ? {
           ...existingParticipant,
           name: existingParticipant.name || cleanName,
-          avatar: avatar || existingParticipant.avatar,
+          avatar: proof.avatar || avatar || existingParticipant.avatar,
           authProvider: 'google'
         }
       : {
           id: participantId,
           name: cleanName,
           email: cleanEmail,
-          phone: phone || '+91 98220 ' + Math.floor(10000 + Math.random() * 90000),
+          phone: phone || '+91 98000 ' + Math.floor(10000 + Math.random() * 90000),
           area: area || 'Koregaon Park',
-          avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanName)}`,
+          avatar: proof.avatar || avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanName)}`,
           bio: bio || 'Pune board gamer • Connected via Google Account',
           joinedDate: nowIso.slice(0, 10),
           totalEventsAttended: 0,
@@ -760,41 +1126,33 @@ async function startServer() {
           registeredAt: nowIso
         };
 
-    const adminCheck = findAdminByEmailOrPhone(cleanEmail);
-    const assignedRole = (adminCheck && adminCheck.role === 'admin') ? 'admin' : 'participant';
-
     const user = {
-      id: adminCheck ? adminCheck.id : userId,
-      name: adminCheck?.name || participant.name || cleanName,
+      id: userId,
+      name: participant.name || cleanName,
       email: cleanEmail,
-      phone: adminCheck?.phone || participant.phone,
-      role: assignedRole,
-      designation: adminCheck?.designation,
-      adminRole: adminCheck ? 'Super Admin' : undefined,
-      status: adminCheck ? 'Active Verified Administrator' : undefined,
-      joinedDate: adminCheck?.createdAt || participant.joinedDate || nowIso.slice(0, 10),
-      permissions: adminCheck ? ['events', 'attendance', 'crm', 'games', 'broadcasts', 'finance', 'reports', 'settings', 'audit'] : undefined,
-      area: adminCheck?.area || participant.area || 'Koregaon Park, Pune',
-      avatar: adminCheck?.avatar || participant.avatar,
-      bio: adminCheck?.bio || participant.bio,
+      phone: participant.phone,
+      role: 'participant' as const,
+      area: participant.area || 'Koregaon Park, Pune',
+      avatar: participant.avatar,
+      bio: participant.bio,
       participantId: participant.id,
       authProvider: 'google',
       loginAt: nowIso,
       lastActiveAt: nowIso
     };
 
-    // Store or update in participants DB without duplicates
     if (existingParticipant) {
       dbParticipants.update(existingParticipant.id, participant);
     } else {
       dbParticipants.insert(participant);
     }
 
-    // Store in google users DB
+    const safeParticipant = sanitizeRecord(participant);
+
     registeredGoogleUsers.set(cleanEmail, {
       email: cleanEmail,
-      googleId: googleId || `g_${cleanEmail}`,
-      participant,
+      googleId: proof.googleId || googleId || `g_${cleanEmail}`,
+      participant: safeParticipant,
       user,
       registeredAt: nowIso
     });
@@ -809,29 +1167,50 @@ async function startServer() {
           subject: `🎲 Welcome to Social Shuffle Pune, ${cleanName}!`,
           html: welcomeHtml,
           text: `Welcome to Social Shuffle Pune, ${cleanName}! We're thrilled to have you in our board game community.`
-        }).then(mailRes => {
-          console.log(`[Welcome Mail (Google)] Sent to ${cleanEmail}:`, mailRes.success ? 'Delivered' : mailRes.error);
         }).catch(err => console.warn('[Welcome Mail (Google) Error]', err));
-      } catch (e) {
-        console.warn('[Welcome Mail Template Error]', e);
-      }
+      } catch {}
     }
+
+    const token = issueSessionToken({
+      id: user.id,
+      email: cleanEmail,
+      role: 'participant',
+      participantId: participant.id
+    });
 
     res.json({
       success: true,
       message: `Welcome to Social Shuffle Pune, ${cleanName}! Account registered in database.`,
+      token,
       user,
-      participant
+      participant: safeParticipant
     });
   });
 
-  // Current User /auth/me: returns full admin or participant profile
-  const handleAuthMe = (req: express.Request, res: express.Response) => {
-    const emailQuery = String(req.query.email || req.query.identifier || 'parimalmshete@gmail.com').trim().toLowerCase();
-    const adminCheck = findAdminByEmailOrPhone(emailQuery);
+  // Logout: immediately revoke active session token on server
+  app.post('/api/auth/logout', (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload | undefined;
+    if (authUser?.jti) {
+      revokedTokenIds.add(authUser.jti);
+    }
+    res.json({ success: true, message: 'Logged out securely.' });
+  });
 
-    if (adminCheck && adminCheck.role === 'admin') {
-      const nowIso = new Date().toISOString();
+  // Current User /auth/me: STRICTLY verifies signed Bearer token (never auto-authenticates unauthenticated callers)
+  const handleAuthMe = (req: express.Request, res: express.Response) => {
+    const authUser = (req as any).authUser as (SessionTokenPayload & { adminRecord?: any }) | undefined;
+    if (!authUser) {
+      return res.json({
+        success: true,
+        isAuthenticated: false,
+        isAdmin: false,
+        role: 'guest',
+        user: null
+      });
+    }
+
+    if (authUser.role === 'admin' && authUser.adminRecord) {
+      const adminCheck = authUser.adminRecord;
       return res.json({
         success: true,
         isAuthenticated: true,
@@ -841,7 +1220,7 @@ async function startServer() {
           id: adminCheck.id,
           name: adminCheck.name,
           email: adminCheck.email,
-          phone: adminCheck.phone || '+91 98220 99887',
+          phone: adminCheck.phone || '+91 92849 83072',
           role: 'admin',
           designation: adminCheck.designation,
           adminRole: 'Super Admin',
@@ -851,58 +1230,46 @@ async function startServer() {
           area: adminCheck.area || 'Koregaon Park, Pune',
           avatar: adminCheck.avatar,
           bio: adminCheck.bio || `${adminCheck.designation} • Social Shuffle Organizer`,
-          authProvider: 'google',
-          loginAt: nowIso,
-          lastActiveAt: nowIso
-        }
-      });
-    }
-
-    const reg = registeredGoogleUsers.get(emailQuery);
-    if (reg) {
-      return res.json({
-        success: true,
-        isAuthenticated: true,
-        isAdmin: false,
-        role: 'participant',
-        user: reg.user,
-        participant: reg.participant
-      });
-    }
-
-    // Default admin in database: Parimal Shete
-    const defaultAdmin = dbAdmins.getAll()[0];
-    if (defaultAdmin) {
-      return res.json({
-        success: true,
-        isAuthenticated: true,
-        isAdmin: true,
-        role: 'admin',
-        user: {
-          id: defaultAdmin.id,
-          name: defaultAdmin.name,
-          email: defaultAdmin.email,
-          phone: defaultAdmin.phone || '+91 98220 99887',
-          role: 'admin',
-          designation: defaultAdmin.designation,
-          adminRole: 'Super Admin',
-          status: 'Active Verified Administrator',
-          joinedDate: defaultAdmin.createdAt || '2024-01-01',
-          permissions: ['events', 'attendance', 'crm', 'games', 'broadcasts', 'finance', 'reports', 'settings', 'audit'],
-          area: defaultAdmin.area || 'Koregaon Park, Pune',
-          avatar: defaultAdmin.avatar,
-          bio: defaultAdmin.bio || `${defaultAdmin.designation} • Social Shuffle Organizer`,
-          authProvider: 'google',
-          loginAt: new Date().toISOString(),
+          loginAt: new Date(authUser.iat).toISOString(),
           lastActiveAt: new Date().toISOString()
         }
       });
     }
 
+    const participant = dbParticipants.getAll().find(
+      (p: any) => p.id === authUser.participantId || String(p.email || '').trim().toLowerCase() === authUser.email
+    );
+
+    if (!participant) {
+      return res.json({
+        success: true,
+        isAuthenticated: false,
+        isAdmin: false,
+        role: 'guest',
+        user: null
+      });
+    }
+
+    const safeP = sanitizeRecord(participant);
     return res.json({
       success: true,
-      isAuthenticated: false,
-      user: null
+      isAuthenticated: true,
+      isAdmin: false,
+      role: 'participant',
+      user: {
+        id: `u-${safeP.id}`,
+        name: safeP.name,
+        email: safeP.email,
+        phone: safeP.phone,
+        role: 'participant',
+        area: safeP.area,
+        avatar: safeP.avatar,
+        bio: safeP.bio,
+        participantId: safeP.id,
+        loginAt: new Date(authUser.iat).toISOString(),
+        lastActiveAt: new Date().toISOString()
+      },
+      participant: safeP
     });
   };
 
@@ -922,7 +1289,7 @@ async function startServer() {
     return res.status(404).json({ error: 'Event not found' });
   });
 
-  app.post('/api/events', (req, res) => {
+  app.post('/api/events', requireAdmin, (req, res) => {
     const eventData = req.body;
     const newId = eventData.id || `ev-${Date.now().toString(36)}`;
     const newNumber = eventData.number || (dbEvents.getAll().length + 1);
@@ -939,13 +1306,13 @@ async function startServer() {
     res.status(201).json(newEvent);
   });
 
-  app.put('/api/events/:id', (req, res) => {
+  app.put('/api/events/:id', requireAdmin, (req, res) => {
     const updated = dbEvents.update(req.params.id, req.body);
     if (updated) return res.json(updated);
     return res.status(404).json({ error: 'Event not found' });
   });
 
-  app.post('/api/events/:id/duplicate', (req, res) => {
+  app.post('/api/events/:id/duplicate', requireAdmin, (req, res) => {
     const orig = dbEvents.getById(req.params.id);
     if (!orig) return res.status(404).json({ error: 'Original event not found' });
     const newNum = dbEvents.getAll().length + 1;
@@ -963,7 +1330,7 @@ async function startServer() {
     res.status(201).json(copy);
   });
 
-  app.delete('/api/events/:id', (req, res) => {
+  app.delete('/api/events/:id', requireAdmin, (req, res) => {
     const removed = dbEvents.remove(req.params.id);
     if (removed) return res.json({ success: true, message: 'Event deleted' });
     return res.status(404).json({ error: 'Event not found' });
@@ -982,7 +1349,7 @@ async function startServer() {
     return res.status(404).json({ error: 'Game not found' });
   });
 
-  app.post('/api/games', (req, res) => {
+  app.post('/api/games', requireAdmin, (req, res) => {
     const gameData = req.body;
     const newId = gameData.id || `g-${Date.now().toString(36)}`;
     const newGame = {
@@ -996,13 +1363,13 @@ async function startServer() {
     res.status(201).json(newGame);
   });
 
-  app.put('/api/games/:id', (req, res) => {
+  app.put('/api/games/:id', requireAdmin, (req, res) => {
     const updated = dbGames.update(req.params.id, req.body);
     if (updated) return res.json(updated);
     return res.status(404).json({ error: 'Game not found' });
   });
 
-  app.patch('/api/games/:id/toggle-active', (req, res) => {
+  app.patch('/api/games/:id/toggle-active', requireAdmin, (req, res) => {
     const game = dbGames.getById(req.params.id);
     if (!game) return res.status(404).json({ error: 'Game not found' });
     const updated = dbGames.update(req.params.id, { active: !game.active });
@@ -1012,11 +1379,20 @@ async function startServer() {
   // ==========================================
   // PARTICIPANTS CRM DATABASE ENDPOINTS
   // ==========================================
-  app.get('/api/participants', (req, res) => {
+  app.get('/api/participants', requireAuth, (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload;
     const search = String(req.query.search || '').trim().toLowerCase();
-    let list = dbParticipants.getAll();
+    let list = dbParticipants.getAll().map(sanitizeRecord);
+
+    if (authUser.role !== 'admin') {
+      list = list.filter(
+        (p: any) => p.id === authUser.participantId || String(p.email || '').trim().toLowerCase() === authUser.email
+      );
+      return res.json(list);
+    }
+
     if (search) {
-      list = list.filter(p =>
+      list = list.filter((p: any) =>
         p.name.toLowerCase().includes(search) ||
         p.email.toLowerCase().includes(search) ||
         p.phone.includes(search) ||
@@ -1026,7 +1402,7 @@ async function startServer() {
     res.json(list);
   });
 
-  app.get('/api/participants/check-duplicate', (req, res) => {
+  app.get('/api/participants/check-duplicate', requireAdmin, (req, res) => {
     const email = String(req.query.email || '').trim().toLowerCase();
     const phone = String(req.query.phone || '').trim().replace(/[^0-9]/g, '');
     const found = dbParticipants.getAll().find(p => {
@@ -1034,10 +1410,10 @@ async function startServer() {
       const pPhone = p.phone.replace(/[^0-9]/g, '');
       return (email && pEmail === email) || (phone.length >= 10 && pPhone.includes(phone));
     });
-    res.json({ duplicate: found || null });
+    res.json({ duplicate: found ? sanitizeRecord(found) : null });
   });
 
-  app.post('/api/participants/merge', (req, res) => {
+  app.post('/api/participants/merge', requireAdmin, (req, res) => {
     const sourceId = String(req.query.sourceId || req.body.sourceId);
     const targetId = String(req.query.targetId || req.body.targetId);
     const source = dbParticipants.getById(sourceId);
@@ -1059,7 +1435,6 @@ async function startServer() {
     dbParticipants.update(targetId, merged);
     dbParticipants.remove(sourceId);
 
-    // Update registrations to point to targetId
     dbRegistrations.getAll().forEach(reg => {
       if (reg.participantId === sourceId) {
         dbRegistrations.update(reg.id, { participantId: targetId });
@@ -1067,60 +1442,82 @@ async function startServer() {
     });
 
     console.log(`[DB CRM] Merged participant ${source.name} into ${target.name}`);
-    res.json(merged);
+    res.json(sanitizeRecord(merged));
   });
 
-  app.post('/api/participants', (req, res) => {
+  app.post('/api/participants', requireAdmin, (req, res) => {
     const data = req.body;
-    const newId = data.id || `p-${Date.now().toString(36)}`;
-    const newP = {
-      ...data,
+    const { password: _p, passwordHash: _ph, ...safeData } = data;
+    const newId = safeData.id || `p-${Date.now().toString(36)}`;
+    const newP: any = {
+      ...safeData,
       id: newId,
-      joinedDate: data.joinedDate || new Date().toISOString().slice(0, 10),
-      totalEventsAttended: data.totalEventsAttended || 0,
-      totalRegistrations: data.totalRegistrations || 0,
-      gamesPlayedIds: data.gamesPlayedIds || [],
-      venuesVisited: data.venuesVisited || [],
-      totalPaxBrought: data.totalPaxBrought || 0
+      passwordHash: hashPassword(data.password || crypto.randomBytes(16).toString('hex')),
+      joinedDate: safeData.joinedDate || new Date().toISOString().slice(0, 10),
+      totalEventsAttended: safeData.totalEventsAttended || 0,
+      totalRegistrations: safeData.totalRegistrations || 0,
+      gamesPlayedIds: safeData.gamesPlayedIds || [],
+      venuesVisited: safeData.venuesVisited || [],
+      totalPaxBrought: safeData.totalPaxBrought || 0
     };
     dbParticipants.insert(newP);
-    res.status(201).json(newP);
+    res.status(201).json(sanitizeRecord(newP));
   });
 
-  app.put('/api/participants/:id', (req, res) => {
-    const updated = dbParticipants.update(req.params.id, req.body);
-    if (updated) return res.json(updated);
+  app.put('/api/participants/:id', requireAuth, (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload;
+    if (authUser.role !== 'admin' && authUser.participantId !== req.params.id) {
+      return res.status(403).json({ success: false, message: 'Forbidden: cannot modify another participant profile.' });
+    }
+    const { id: _id, role: _role, password: _p, passwordHash: _ph, ...allowedUpdates } = req.body || {};
+    const updated = dbParticipants.update(req.params.id, allowedUpdates);
+    if (updated) return res.json(sanitizeRecord(updated));
     return res.status(404).json({ error: 'Participant not found' });
   });
 
   // ==========================================
   // REGISTRATIONS & LIVE ATTENDANCE ENDPOINTS
   // ==========================================
-  app.get('/api/registrations', (req, res) => {
+  app.get('/api/registrations', requireAuth, (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload;
     const eventId = req.query.eventId as string;
     let list = dbRegistrations.getAll();
+    if (authUser.role !== 'admin') {
+      list = list.filter(
+        r => r.participantId === authUser.participantId || String(r.participantEmail || '').trim().toLowerCase() === authUser.email
+      );
+    }
     if (eventId) {
       list = list.filter(r => r.eventId === eventId);
     }
     res.json(list);
   });
 
-  app.post('/api/registrations', (req, res) => {
+  app.post('/api/registrations', requireAuth, (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload;
     const regData = req.body;
+    const paxCount = Math.max(1, Math.min(20, Number(regData.paxCount) || 1));
     const newId = regData.id || `reg-${Date.now().toString(36)}`;
+    const ev = dbEvents.getById(regData.eventId);
+
+    const participantId = authUser.role === 'admin'
+      ? (regData.participantId || authUser.participantId)
+      : (authUser.participantId || regData.participantId);
+
     const newReg = {
       ...regData,
       id: newId,
+      participantId,
+      paxCount,
+      amountPaid: ev ? paxCount * (Number(ev.ticketPrice) || 350) : Number(regData.amountPaid) || 350,
       registeredAt: regData.registeredAt || new Date().toISOString(),
-      attendanceStatus: regData.attendanceStatus || 'Registered',
+      attendanceStatus: authUser.role === 'admin' ? (regData.attendanceStatus || 'Registered') : 'Pending',
       paymentStatus: regData.paymentStatus || 'Completed'
     };
     dbRegistrations.insert(newReg);
 
-    // Update event registration count
-    const ev = dbEvents.getById(newReg.eventId);
     if (ev) {
-      dbEvents.update(ev.id, { registeredCount: (ev.registeredCount || 0) + (newReg.paxCount || 1) });
+      dbEvents.update(ev.id, { registeredCount: (ev.registeredCount || 0) + paxCount });
     }
 
     // Automatically dispatch real email confirmation with entry pass QR code
@@ -1132,36 +1529,14 @@ async function startServer() {
           subject: `🎲 VIP Entry Pass: ${ev?.title || 'Social Shuffle Pune'}!`,
           html: emailHtml,
           text: `Your entry pass for ${ev?.title || 'Social Shuffle'} is confirmed. Token: ${newReg.qrCodeToken || newReg.id}`
-        }).then(mailRes => {
-          console.log(`[Registration Mail] Pass sent to ${newReg.participantEmail}:`, mailRes.success ? 'Delivered' : mailRes.error);
         }).catch(err => console.warn('[Registration Mail Error]', err));
-      } catch (err) {
-        console.warn('[Registration Mail Template Error]', err);
-      }
+      } catch {}
     }
 
-    /*
-    // WhatsApp notification temporarily commented out
-    if (newReg.participantPhone) {
-      try {
-        const waText = generateEventWhatsAppNotification(newReg as any, ev, 'Your Social Shuffle pass is confirmed! Show this check-in token at the door.');
-        dispatchOutboundWhatsApp({
-          toPhone: newReg.participantPhone,
-          messageText: waText
-        }).then(waRes => {
-          console.log(`[Registration WhatsApp] Dispatched to ${newReg.participantPhone}:`, waRes.statusText);
-        }).catch(err => console.warn('[Registration WhatsApp Error]', err));
-      } catch (err) {
-        console.warn('[Registration WhatsApp Template Error]', err);
-      }
-    }
-    */
-
-    console.log(`[DB Reg] New RSVP in database for event ${newReg.eventId}: ${newReg.participantName} (${newReg.paxCount} pax)`);
     res.status(201).json(newReg);
   });
 
-  app.post('/api/registrations/bulk-import', (req, res) => {
+  app.post('/api/registrations/bulk-import', requireAdmin, (req, res) => {
     const incoming = req.body;
     if (Array.isArray(incoming)) {
       incoming.forEach(reg => {
@@ -1175,14 +1550,13 @@ async function startServer() {
     return res.status(400).json({ error: 'Array expected' });
   });
 
-  app.patch('/api/registrations/:id/attendance', (req, res) => {
+  app.patch('/api/registrations/:id/attendance', requireAdmin, (req, res) => {
     const status = String(req.query.status || req.body.status || 'Checked In');
     const updated = dbRegistrations.update(req.params.id, {
       attendanceStatus: status as any,
       checkedInAt: status === 'Checked In' ? new Date().toISOString() : undefined
     });
     if (updated) {
-      // Recalculate event checked-in count
       const eventRegs = dbRegistrations.getAll().filter(r => r.eventId === updated.eventId && r.attendanceStatus === 'Checked In');
       dbEvents.update(updated.eventId, { checkedInCount: eventRegs.reduce((acc, c) => acc + (c.paxCount || 1), 0) });
       return res.json(updated);
@@ -1190,7 +1564,7 @@ async function startServer() {
     return res.status(404).json({ error: 'Registration not found' });
   });
 
-  app.patch('/api/registrations/:id/payment', (req, res) => {
+  app.patch('/api/registrations/:id/payment', requireAdmin, (req, res) => {
     const status = String(req.query.status || req.body.status || 'Completed');
     const updated = dbRegistrations.update(req.params.id, { paymentStatus: status as any });
     if (updated) return res.json(updated);
@@ -1236,7 +1610,9 @@ async function startServer() {
     });
   });
 
-  app.post('/api/payments/razorpay/config', (req, res) => {
+  const issuedOrders = new Map<string, { amountInRupees: number; eventId?: string }>();
+
+  app.post('/api/payments/razorpay/config', requireAdmin, (req, res) => {
     try {
       const current = loadRazorpayConfig();
       const updated = {
@@ -1251,24 +1627,24 @@ async function startServer() {
         lastUpdated: new Date().toISOString()
       };
       fs.writeFileSync(RAZORPAY_CONFIG_PATH, JSON.stringify(updated, null, 2), 'utf-8');
-      console.log(`[Razorpay DB] Updated gateway config. Key: ${updated.keyId}, Live: ${updated.isLive}`);
       res.json({ success: true, message: 'Razorpay configuration saved successfully', config: { ...updated, keySecret: undefined } });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message });
     }
   });
 
-  app.post('/api/payments/razorpay/create-order', (req, res) => {
-    const { amount, eventId, eventTitle, participantName, participantEmail, paxCount } = req.body;
+  app.post('/api/payments/razorpay/create-order', requireAuth, (req, res) => {
+    const { amount, eventId, eventTitle, paxCount } = req.body;
     const config = loadRazorpayConfig();
     const keyId = process.env.VITE_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || config.keyId || 'rzp_test_SocialShufflePune';
 
-    // Amount in INR
-    const numAmount = Number(amount) || 350;
+    const ev = eventId ? dbEvents.getById(String(eventId)) : null;
+    const validPax = Math.max(1, Math.min(20, Number(paxCount) || 1));
+    const numAmount = ev ? validPax * (Number(ev.ticketPrice) || 350) : Math.max(1, Number(amount) || 350);
     const amountInPaise = Math.round(numAmount * 100);
 
-    // Generate unique Razorpay Order ID format: order_XXXXXXXXXXXXXXXX
-    const orderId = `order_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const orderId = `order_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    issuedOrders.set(orderId, { amountInRupees: numAmount, eventId });
 
     console.log(`[Razorpay Order] Created order ${orderId} for ₹${numAmount} (${amountInPaise} paise) — Event: ${eventTitle || eventId}`);
 
@@ -1284,11 +1660,26 @@ async function startServer() {
     });
   });
 
-  app.post('/api/payments/razorpay/verify-payment', (req, res) => {
-    const { razorpayPaymentId, razorpayOrderId, registrationId, eventId, amount } = req.body;
-    const paymentId = razorpayPaymentId || `pay_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  app.post('/api/payments/razorpay/verify-payment', requireAuth, (req, res) => {
+    const { razorpayPaymentId, razorpayOrderId, razorpaySignature, registrationId, amount } = req.body;
+    const config = loadRazorpayConfig();
 
-    console.log(`[Razorpay Verify] Payment verified: ${paymentId} for order ${razorpayOrderId || 'N/A'}, amount: ₹${amount || 0}`);
+    // If Razorpay HMAC signature and secret exist, enforce cryptographic signature validation
+    if (config.keySecret && razorpayOrderId && razorpayPaymentId && razorpaySignature) {
+      const expectedSig = crypto
+        .createHmac('sha256', config.keySecret)
+        .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+        .digest('hex');
+      const sigBuf = Buffer.from(String(razorpaySignature));
+      const expectedBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+        return res.status(400).json({ success: false, message: 'Razorpay payment signature verification failed!' });
+      }
+    }
+
+    const orderInfo = razorpayOrderId ? issuedOrders.get(String(razorpayOrderId)) : undefined;
+    const verifiedAmount = orderInfo?.amountInRupees || Number(amount) || 0;
+    const paymentId = razorpayPaymentId || `pay_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 
     if (registrationId) {
       const reg = dbRegistrations.getById(registrationId);
@@ -1297,7 +1688,7 @@ async function startServer() {
           paymentStatus: 'Confirmed',
           razorpayPaymentId: paymentId,
           razorpayOrderId: razorpayOrderId || reg.razorpayOrderId,
-          amountPaid: Number(amount) || reg.amountPaid
+          amountPaid: verifiedAmount || reg.amountPaid
         });
       }
     }
@@ -1311,10 +1702,18 @@ async function startServer() {
     });
   });
 
-  app.post('/api/registrations/:id/toggle-game', (req, res) => {
+  app.post('/api/registrations/:id/toggle-game', requireAuth, (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload;
     const gameId = String(req.query.gameId || req.body.gameId);
     const reg = dbRegistrations.getById(req.params.id);
     if (!reg) return res.status(404).json({ error: 'Registration not found' });
+    if (
+      authUser.role !== 'admin' &&
+      reg.participantId !== authUser.participantId &&
+      String(reg.participantEmail || '').trim().toLowerCase() !== authUser.email
+    ) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
     const currentGames = reg.gamesPlayedIds || [];
     const updatedGames = currentGames.includes(gameId)
@@ -1325,19 +1724,19 @@ async function startServer() {
     res.json(updated);
   });
 
-  app.post('/api/registrations/walk-in', (req, res) => {
+  app.post('/api/registrations/walk-in', requireAdmin, (req, res) => {
     const eventId = String(req.query.eventId || req.body.eventId);
     const { name, phone, email, area, paxCount, paymentStatus, notes } = req.body;
     const newId = `reg-walkin-${Date.now().toString(36)}`;
 
-    // Create participant if doesn't exist
-    let p = dbParticipants.getAll().find(part => part.email.toLowerCase() === email.toLowerCase());
+    let p: any = dbParticipants.getAll().find(part => part.email.toLowerCase() === String(email || '').toLowerCase());
     if (!p) {
       p = {
         id: `p-${Date.now().toString(36)}`,
         name,
         email,
         phone,
+        passwordHash: hashPassword(crypto.randomBytes(16).toString('hex')),
         area: area || 'Pune',
         avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name)}`,
         bio: 'Board game lover',
@@ -1370,7 +1769,6 @@ async function startServer() {
 
     dbRegistrations.insert(newReg);
 
-    // Update event counts
     const ev = dbEvents.getById(eventId);
     if (ev) {
       dbEvents.update(ev.id, {
@@ -1379,7 +1777,6 @@ async function startServer() {
       });
     }
 
-    // Automatically dispatch entry pass email for walk-in attendee
     if (email) {
       try {
         const emailHtml = generateRegistrationEmailHtml(newReg as any, ev);
@@ -1388,18 +1785,24 @@ async function startServer() {
           subject: `🎲 VIP Entry Pass (Walk-in Confirmed): ${ev?.title || 'Social Shuffle Pune'}!`,
           html: emailHtml,
           text: `Your walk-in registration for ${ev?.title || 'Social Shuffle'} is confirmed. Token: ${newReg.id}`
-        }).then(mailRes => {
-          console.log(`[Walk-in Mail] Sent to ${email}:`, mailRes.success ? 'Delivered' : mailRes.error);
         }).catch(err => console.warn('[Walk-in Mail Error]', err));
-      } catch (err) {
-        console.warn('[Walk-in Mail Template Error]', err);
-      }
+      } catch {}
     }
 
     res.status(201).json(newReg);
   });
 
-  app.delete('/api/registrations/:id', (req, res) => {
+  app.delete('/api/registrations/:id', requireAuth, (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload;
+    const existing = dbRegistrations.getById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Registration not found' });
+    if (
+      authUser.role !== 'admin' &&
+      existing.participantId !== authUser.participantId &&
+      String(existing.participantEmail || '').trim().toLowerCase() !== authUser.email
+    ) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     const removed = dbRegistrations.remove(req.params.id);
     if (removed) return res.json({ success: true, message: 'Registration cancelled' });
     return res.status(404).json({ error: 'Registration not found' });
@@ -1440,8 +1843,8 @@ async function startServer() {
     res.json(updatedStats);
   };
 
-  app.put('/api/community/stats', handleUpdateCommunityStats);
-  app.post('/api/community/stats', handleUpdateCommunityStats);
+  app.put('/api/community/stats', requireAdmin, handleUpdateCommunityStats);
+  app.post('/api/community/stats', requireAdmin, handleUpdateCommunityStats);
 
   // ==========================================
   // COMMUNITY: FEEDBACK, REPORTS, VOLUNTEERS
@@ -1459,7 +1862,6 @@ async function startServer() {
     };
     dbFeedback.insert(newFb);
 
-    // Alert admin Parimal with feedback details
     try {
       const fbHtml = generateFeedbackAdminAlertEmailHtml(newFb);
       sendOutboundEmail({
@@ -1468,14 +1870,12 @@ async function startServer() {
         html: fbHtml,
         text: `New feedback received from ${newFb.userName || 'Attendee'}: ${newFb.rating} stars. Comments: ${newFb.comment || 'N/A'}`
       }).catch(err => console.warn('[Feedback Alert Error]', err));
-    } catch (err) {
-      console.warn('[Feedback Alert Template Error]', err);
-    }
+    } catch {}
 
     res.status(201).json(newFb);
   });
 
-  app.get('/api/community/reports', (_req, res) => {
+  app.get('/api/community/reports', requireAdmin, (_req, res) => {
     res.json(dbReports.getAll());
   });
 
@@ -1484,12 +1884,11 @@ async function startServer() {
     const newRep = {
       ...data,
       id: data.id || `rep-${Date.now().toString(36)}`,
-      status: data.status || 'New',
+      status: 'New',
       createdAt: new Date().toISOString()
     };
     dbReports.insert(newRep);
 
-    // 1. Alert leadership Parimal immediately
     try {
       const alertHtml = generateReportAdminAlertEmailHtml(newRep);
       sendOutboundEmail({
@@ -1498,11 +1897,8 @@ async function startServer() {
         html: alertHtml,
         text: `A safety / grievance report has been submitted by ${newRep.reporterName || 'Anonymous'}. Description: ${newRep.description || ''}`
       }).catch(err => console.warn('[Report Alert Error]', err));
-    } catch (err) {
-      console.warn('[Report Alert Template Error]', err);
-    }
+    } catch {}
 
-    // 2. Acknowledge reporter if email provided
     if (newRep.reporterEmail) {
       try {
         const ackHtml = generateReportAckEmailHtml(newRep);
@@ -1512,15 +1908,13 @@ async function startServer() {
           html: ackHtml,
           text: `Hello ${newRep.reporterName || 'Fellow Shuffler'}, thank you for contacting Social Shuffle leadership. We are reviewing your submission.`
         }).catch(err => console.warn('[Report Ack Error]', err));
-      } catch (err) {
-        console.warn('[Report Ack Template Error]', err);
-      }
+      } catch {}
     }
 
     res.status(201).json(newRep);
   });
 
-  app.patch('/api/community/reports/:id/status', (req, res) => {
+  app.patch('/api/community/reports/:id/status', requireAdmin, (req, res) => {
     const { status, notes } = req.query;
     const updated = dbReports.update(req.params.id, {
       status: (status as any) || 'Resolved',
@@ -1530,8 +1924,13 @@ async function startServer() {
     return res.status(404).json({ error: 'Report not found' });
   });
 
-  app.get('/api/community/volunteers', (_req, res) => {
-    res.json(dbVolunteers.getAll());
+  app.get('/api/community/volunteers', requireAuth, (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload;
+    const all = dbVolunteers.getAll();
+    if (authUser.role === 'admin') {
+      return res.json(all);
+    }
+    return res.json(all.filter(v => String(v.email || '').trim().toLowerCase() === authUser.email));
   });
 
   app.post('/api/community/volunteers', (req, res) => {
@@ -1539,12 +1938,11 @@ async function startServer() {
     const newVol = {
       ...data,
       id: data.id || `vol-${Date.now().toString(36)}`,
-      status: data.status || 'New',
+      status: 'New',
       submittedAt: new Date().toISOString()
     };
     dbVolunteers.insert(newVol);
 
-    // 1. Send confirmation to volunteer
     if (newVol.email) {
       try {
         const confHtml = generateVolunteerConfirmationEmailHtml(newVol);
@@ -1554,12 +1952,9 @@ async function startServer() {
           html: confHtml,
           text: `Hello ${newVol.name}, we received your volunteer application for Social Shuffle Pune. We will contact you shortly!`
         }).catch(err => console.warn('[Volunteer Conf Mail Error]', err));
-      } catch (err) {
-        console.warn('[Volunteer Conf Mail Template Error]', err);
-      }
+      } catch {}
     }
 
-    // 2. Alert admin Parimal
     try {
       const alertHtml = generateVolunteerAdminAlertEmailHtml(newVol);
       sendOutboundEmail({
@@ -1568,14 +1963,12 @@ async function startServer() {
         html: alertHtml,
         text: `New volunteer application received from ${newVol.name} (${newVol.email}, ${newVol.phone}).`
       }).catch(err => console.warn('[Volunteer Admin Alert Error]', err));
-    } catch (err) {
-      console.warn('[Volunteer Admin Alert Template Error]', err);
-    }
+    } catch {}
 
     res.status(201).json(newVol);
   });
 
-  app.patch('/api/community/volunteers/:id/status', (req, res) => {
+  app.patch('/api/community/volunteers/:id/status', requireAdmin, (req, res) => {
     const { status } = req.query;
     const updated = dbVolunteers.update(req.params.id, {
       status: (status as any) || 'Approved'
@@ -1587,11 +1980,11 @@ async function startServer() {
   // ==========================================
   // AUDIT LOGS & NOTIFICATIONS ENDPOINTS
   // ==========================================
-  app.get('/api/audit-logs', (_req, res) => {
+  app.get('/api/audit-logs', requireAdmin, (_req, res) => {
     res.json(dbAuditLogs.getAll());
   });
 
-  app.post('/api/audit-logs', (req, res) => {
+  app.post('/api/audit-logs', requireAdmin, (req, res) => {
     const data = req.body;
     const newLog = {
       ...data,
@@ -1602,29 +1995,52 @@ async function startServer() {
     res.status(201).json(newLog);
   });
 
-  app.get('/api/notifications', (_req, res) => {
-    res.json(dbNotifications.getAll());
+  app.get('/api/notifications', (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload | undefined;
+    const items = dbNotifications.getAll().filter((n: any) => !String(n.id || '').startsWith('notif-otp-'));
+
+    if (!authUser) {
+      // Guest callers see only public broadcast/event/system announcements without private emails/HTML
+      return res.json(
+        items
+          .filter((n: any) => ['event', 'broadcast', 'system'].includes(n.type) && !n.recipientEmail)
+          .map((n: any) => {
+            const { recipientEmail: _re, emailHtml: _eh, ...pub } = n;
+            return pub;
+          })
+      );
+    }
+
+    if (authUser.role === 'admin') {
+      return res.json(items);
+    }
+
+    return res.json(
+      items.filter(
+        (n: any) => !n.recipientEmail || String(n.recipientEmail).trim().toLowerCase() === authUser.email
+      )
+    );
   });
 
-  app.patch('/api/notifications/:id/read', (req, res) => {
+  app.patch('/api/notifications/:id/read', requireAuth, (req, res) => {
     const updated = dbNotifications.update(req.params.id, { read: true });
     if (updated) return res.json({ success: true });
     return res.status(404).json({ error: 'Notification not found' });
   });
 
-  app.post('/api/notifications/mark-all-read', (_req, res) => {
+  app.post('/api/notifications/mark-all-read', requireAuth, (_req, res) => {
     dbNotifications.getAll().forEach(n => {
       dbNotifications.update(n.id, { read: true });
     });
     res.json({ success: true });
   });
 
-  app.delete('/api/notifications/:id', (req, res) => {
+  app.delete('/api/notifications/:id', requireAuth, (req, res) => {
     dbNotifications.remove(req.params.id);
     res.json({ success: true, id: req.params.id });
   });
 
-  app.post('/api/notifications/community-announcement', (req, res) => {
+  app.post('/api/notifications/community-announcement', requireAdmin, (req, res) => {
     const { title, message } = req.body;
     const newNotif = {
       id: `notif-${Date.now()}`,
@@ -1779,12 +2195,13 @@ async function startServer() {
     });
   };
 
-  app.post('/api/notifications/event-broadcast', handleDualPushNotification);
-  app.post('/api/events/:id/push-notification', handleDualPushNotification);
-  app.post('/api/notifications/send-reminder/:id', handleDualPushNotification);
+  app.post('/api/notifications/event-broadcast', requireAdmin, handleDualPushNotification);
+  app.post('/api/events/:id/push-notification', requireAdmin, handleDualPushNotification);
+  app.post('/api/notifications/send-reminder/:id', requireAdmin, handleDualPushNotification);
 
   // Send Registration Confirmation Pass via Real Email
-  app.post('/api/notifications/registration-confirmation/:id', async (req, res) => {
+  app.post('/api/notifications/registration-confirmation/:id', requireAuth, async (req, res) => {
+    const authUser = (req as any).authUser as SessionTokenPayload;
     let reg = dbRegistrations.getById(req.params.id);
     if (!reg && req.body && req.body.registration) {
       reg = req.body.registration;
@@ -1793,6 +2210,13 @@ async function startServer() {
       } catch {}
     }
     if (!reg) return res.status(404).json({ success: false, message: 'Registration not found' });
+    if (
+      authUser.role !== 'admin' &&
+      reg.participantId !== authUser.participantId &&
+      String(reg.participantEmail || '').trim().toLowerCase() !== authUser.email
+    ) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
     const ev = dbEvents.getById(reg.eventId) || req.body?.event;
 
     let emailRes: any = { success: false };
@@ -1805,9 +2229,7 @@ async function startServer() {
           html: emailHtml,
           text: `Your entry pass for ${ev?.title || 'Social Shuffle'} is confirmed. Token: ${reg.qrCodeToken || reg.id}`
         });
-        console.log(`[Registration Confirmation Email] Dispatched to ${reg.participantEmail}:`, emailRes.success ? 'Delivered' : emailRes.error);
       } catch (err: any) {
-        console.warn('[Confirmation Mail Error]', err?.message);
         emailRes = { success: false, error: err?.message };
       }
     }
@@ -1822,7 +2244,7 @@ async function startServer() {
     });
   });
 
-  // OTP Verification System with REAL Outbound Email
+  // OTP Verification System with Cryptographic RNG, Cooldown & Attempt Lockout
   interface OtpRecord {
     email: string;
     otp: string;
@@ -1832,6 +2254,7 @@ async function startServer() {
     name?: string;
   }
   const otpStore = new Map<string, OtpRecord>();
+  const otpSendHistory = new Map<string, number[]>();
   const verifiedEmails = new Set<string>();
 
   app.post('/api/auth/otp/send', async (req, res) => {
@@ -1840,21 +2263,40 @@ async function startServer() {
       return res.status(400).json({ success: false, message: 'Valid email address is required' });
     }
     const cleanEmail = email.trim().toLowerCase();
+
+    // Prevent rapid OTP spamming per email
+    const now = Date.now();
+    const existing = otpStore.get(cleanEmail);
+    if (existing && now - existing.createdAt < 30 * 1000) {
+      return res.status(429).json({
+        success: false,
+        message: 'Please wait 30 seconds before requesting another verification code.'
+      });
+    }
+    const history = (otpSendHistory.get(cleanEmail) || []).filter(ts => ts > now - 15 * 60 * 1000);
+    if (history.length >= 5) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many OTP requests for this email. Please wait 15 minutes and try again.'
+      });
+    }
+    history.push(now);
+    otpSendHistory.set(cleanEmail, history);
+
     const cleanName = (name && typeof name === 'string') ? name.trim() : 'Fellow Shuffler';
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = crypto.randomInt(100000, 1000000).toString();
     const expiresInSeconds = 600;
-    const expiresAt = Date.now() + expiresInSeconds * 1000;
+    const expiresAt = now + expiresInSeconds * 1000;
 
     otpStore.set(cleanEmail, {
       email: cleanEmail,
       otp,
       expiresAt,
-      createdAt: Date.now(),
+      createdAt: now,
       attempts: 0,
       name: cleanName
     });
 
-    // Send REAL OTP verification email
     const otpEmailHtml = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0E162B; color: #f8fafc; padding: 32px 24px; border-radius: 16px; max-width: 520px; margin: 20px auto; border: 1px solid #1F305E;">
         <div style="text-align: center; margin-bottom: 24px;">
@@ -1875,7 +2317,7 @@ async function startServer() {
       </div>
     `;
 
-    // Send REAL OTP verification email asynchronously (non-blocking)
+    // Send OTP strictly to recipient email inbox (never expose in public notifications)
     sendOutboundEmail({
       to: cleanEmail,
       subject: `🎲 ${otp} is your Social Shuffle verification code`,
@@ -1886,19 +2328,6 @@ async function startServer() {
     }).catch(err => {
       console.warn('[OTP Email Error]', err?.message);
     });
-
-    // Also persist in in-app notifications so user can view it in the app
-    try {
-      dbNotifications.insert({
-        id: `notif-otp-${Date.now()}`,
-        userId: cleanEmail,
-        title: 'Email Verification Code',
-        message: `Your verification code is ${otp}. Enter this 6-digit code to complete signup.`,
-        type: 'account',
-        read: false,
-        createdAt: new Date().toISOString()
-      });
-    } catch {}
 
     res.json({
       success: true,
@@ -1924,9 +2353,20 @@ async function startServer() {
       otpStore.delete(cleanEmail);
       return res.status(400).json({ success: false, message: 'Verification code has expired' });
     }
-    if (record.otp !== cleanOtp) {
+    if (record.attempts >= 5) {
+      otpStore.delete(cleanEmail);
+      return res.status(429).json({ success: false, message: 'Too many invalid attempts. Please request a new OTP code.' });
+    }
+    const otpBuf = Buffer.from(cleanOtp);
+    const storedBuf = Buffer.from(record.otp);
+    if (otpBuf.length !== storedBuf.length || !crypto.timingSafeEqual(otpBuf, storedBuf)) {
       record.attempts += 1;
-      return res.status(400).json({ success: false, message: 'Invalid OTP code' });
+      const remaining = Math.max(0, 5 - record.attempts);
+      if (remaining === 0) {
+        otpStore.delete(cleanEmail);
+        return res.status(429).json({ success: false, message: 'Too many invalid attempts. Please request a new OTP code.' });
+      }
+      return res.status(400).json({ success: false, message: `Invalid OTP code (${remaining} attempts remaining)` });
     }
 
     verifiedEmails.add(cleanEmail);
@@ -1943,11 +2383,10 @@ async function startServer() {
   // COMMUNICATIONS CONFIG & TEST DISPATCH APIS
   // ==========================================
 
-  // Get current Email & WhatsApp configuration (passwords masked)
-  app.get('/api/communications/config', async (_req, res) => {
+  app.get('/api/communications/config', requireAdmin, async (_req, res) => {
     try {
       const config = loadCommunicationsConfig();
-      const { transporter, provider, isRealSmtp } = await getMailTransporter();
+      const { provider, isRealSmtp } = await getMailTransporter();
 
       res.json({
         success: true,
@@ -1970,8 +2409,7 @@ async function startServer() {
     }
   });
 
-  // Update Email SMTP or WhatsApp configuration
-  app.post('/api/communications/config', (req, res) => {
+  app.post('/api/communications/config', requireAdmin, (req, res) => {
     try {
       const current = loadCommunicationsConfig();
       const { email, whatsapp } = req.body;
@@ -1980,7 +2418,6 @@ async function startServer() {
         email: {
           ...current.email,
           ...(email || {}),
-          // Don't overwrite password with masked placeholder
           pass: (email?.pass && email.pass !== '••••••••••••') ? email.pass : current.email.pass
         },
         whatsapp: {
@@ -2003,19 +2440,17 @@ async function startServer() {
     }
   });
 
-  // Sync active Google OAuth token for Gmail API dispatch
-  app.post('/api/communications/set-gmail-token', (req, res) => {
+  app.post('/api/communications/set-gmail-token', requireAdmin, (req, res) => {
     const { token, email } = req.body;
     setGmailOAuthToken(token || null, email || null);
     res.json({ success: true, ...getGmailOAuthStatus() });
   });
 
-  app.get('/api/communications/gmail-status', (_req, res) => {
+  app.get('/api/communications/gmail-status', requireAdmin, (_req, res) => {
     res.json(getGmailOAuthStatus());
   });
 
-  // Live Outbound Email Test Dispatch
-  app.post('/api/communications/test-email', async (req, res) => {
+  app.post('/api/communications/test-email', requireAdmin, async (req, res) => {
     const targetRecipient = req.body.toEmail || req.body.to || req.body.email || 'parimalmshete@gmail.com';
     const { subject = '🎲 Social Shuffle Test Email Dispatch', message = 'This is a live test email sent from the Social Shuffle Pune platform.' } = req.body;
     const toEmail = String(targetRecipient).trim();
@@ -2031,8 +2466,8 @@ async function startServer() {
           <p style="color: #94A3B8; font-size: 13px; margin: 0;">Social Shuffle Pune • Outbound Mail Service</p>
         </div>
         <div style="background-color: #131E3A; border: 1px solid #283677; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
-          <p style="font-size: 14px; margin-top: 0; color: #e2e8f0;">${message.replace(/\n/g, '<br/>')}</p>
-          <div style="border-top: 1px solid #283677; margin-top: 16px; padding-top: 14px; font-size: 12px; color: #94A3B8; space-y: 4px;">
+          <p style="font-size: 14px; margin-top: 0; color: #e2e8f0;">${String(message).replace(/\n/g, '<br/>')}</p>
+          <div style="border-top: 1px solid #283677; margin-top: 16px; padding-top: 14px; font-size: 12px; color: #94A3B8;">
             <div><strong>Recipient:</strong> ${toEmail}</div>
             <div><strong>Dispatched At:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)</div>
             <div><strong>Status:</strong> Successfully Transmitted over SMTP</div>

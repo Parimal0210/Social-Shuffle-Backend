@@ -317,20 +317,19 @@ CREATE TABLE `notifications` (
 
 -- 1. Seed `admins`
 INSERT INTO `admins` (`id`, `name`, `email`, `phone`, `password`, `role`, `designation`, `avatar`, `bio`, `active`, `created_at`) VALUES
-('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 98220 99887', 'admin123', 'admin', 'Co-Founder & Community Architect', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Community Architect', 1, '2024-01-01T00:00:00Z'),
-('u-admin-parimal-work', 'Parimal Shete (Work)', 'parimal.work@gmail.com', '+91 98220 55443', 'admin123', 'admin', 'Co-Founder', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder', 1, '2024-01-01T00:00:00Z'),
-('u-admin-diksha', 'Diksha', 'diksha@socialshuffle.in', '+91 98220 88776', 'admin123', 'admin', 'Co-Founder & Experience Director', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Experience Director', 1, '2024-01-01T00:00:00Z'),
-('u-admin-aman', 'Aman Joshi (Host)', 'admin@socialshuffle.com', '+91 98220 11223', 'admin123', 'admin', 'Community Host & Super Admin', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Lead Host & Admin', 1, '2024-01-01T00:00:00Z');
+('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Community Architect', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Community Architect', 1, '2024-01-01T00:00:00Z'),
+('u-admin-parimal-work', 'Parimal Shete (Work)', 'parimal.work@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder', 1, '2024-01-01T00:00:00Z'),
+('u-admin-diksha', 'Diksha', 'diksha@socialshuffle.in', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Experience Director', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Experience Director', 1, '2024-01-01T00:00:00Z');
 
 -- 2. Seed `users`
 INSERT INTO `users` (`id`, `name`, `email`, `phone`, `password`, `role`, `area`, `avatar`, `bio`, `participant_id`, `auth_provider`, `last_active_at`, `login_at`, `created_at`) VALUES
-('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 98220 99887', 'admin123', 'admin', 'Koregaon Park', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Co-Founder & Community Architect at Social Shuffle', NULL, 'google', '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z', '2024-01-01T00:00:00Z');
+('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Koregaon Park', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Co-Founder & Community Architect at Social Shuffle', NULL, 'google', '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z', '2024-01-01T00:00:00Z');
 
 -- 3. `participants` (Clean initial state: populated as real users register)
 
 -- 4. Seed `venues`
 INSERT INTO `venues` (`id`, `name`, `address`, `area`, `capacity`, `contact_phone`, `maps_url`, `image`, `active`) VALUES
-('ven-1', 'The Rustle Nest Cafe', 'Lane 6, Koregaon Park, Pune, Maharashtra 411001', 'Koregaon Park', 45, '+91 98220 11223', 'https://maps.google.com/?q=The+Rustle+Nest+Cafe+Pune', 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=800', 1),
+('ven-1', 'The Rustle Nest Cafe', 'Lane 6, Koregaon Park, Pune, Maharashtra 411001', 'Koregaon Park', 45, '+91 92849 83072', 'https://maps.google.com/?q=The+Rustle+Nest+Cafe+Pune', 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=800', 1),
 ('ven-2', 'Pagdandi Bookstore Cafe', 'Shop 6, Regent Plaza, Baner - Pashan Link Rd, Pune 411045', 'Baner', 35, '+91 98220 44556', 'https://maps.google.com/?q=Pagdandi+Bookstore+Cafe+Baner', 'https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&q=80&w=800', 1),
 ('ven-3', 'Waari Book Cafe', 'Ground Floor, Choice Institute, Kothrud, Pune 411038', 'Kothrud', 50, '+91 98220 77889', 'https://maps.google.com/?q=Waari+Book+Cafe+Kothrud', 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&q=80&w=800', 1);
 
@@ -367,11 +366,11 @@ INSERT INTO `badge_levels` (`level`, `short_title`, `fancy_name`, `subtitle`, `d
 
 -- 11. Seed `audit_logs`
 INSERT INTO `audit_logs` (`id`, `admin_name`, `action`, `target`, `details`, `description`, `timestamp`) VALUES
-('log-1', 'Aman Joshi (Host)', 'SECURITY_INIT', 'Database', 'All domain entities (admins, badges, venues, events, games) persisted directly in database', 'Anti-phishing and direct database query baseline active', '2026-09-29T12:00:00Z');
+('log-1', 'Parimal Shete', 'SECURITY_INIT', 'Database', 'All domain entities (admins, badges, venues, events, games) persisted directly in database', 'Anti-phishing and direct database query baseline active', '2026-09-29T12:00:00Z');
 
 -- 12. Seed `notifications`
 INSERT INTO `notifications` (`id`, `title`, `message`, `type`, `channel`, `recipient_email`, `recipient_phone`, `event_id`, `delivery_status`, `whatsapp_status`, `timestamp`, `is_read`) VALUES
-('notif-1', 'Social Shuffle #35 Live', 'Meetup announced for Koregaon Park. Registrations are open!', 'event', 'dual', 'admin@socialshuffle.com', '+91 98220 11223', 'evt-35', 'Sent', 'Delivered', '2026-09-29T12:00:00Z', 0);
+('notif-1', 'Social Shuffle #35 Live', 'Meetup announced for Koregaon Park. Registrations are open!', 'event', 'dual', 'parimalmshete@gmail.com', '+91 92849 83072', 'evt-35', 'Sent', 'Delivered', '2026-09-29T12:00:00Z', 0);
 
 SET FOREIGN_KEY_CHECKS = 1;
 -- ==============================================================================

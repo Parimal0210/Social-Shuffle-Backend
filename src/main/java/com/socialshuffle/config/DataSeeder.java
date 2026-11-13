@@ -58,26 +58,38 @@ public class DataSeeder implements CommandLineRunner {
 
     private void seedAdmins() {
         if (adminRepository.count() == 0) {
-            AdminAccount admin = new AdminAccount(
-                    "u-admin",
-                    "Aman Joshi (Host)",
-                    "admin@socialshuffle.com",
-                    "+91 98220 11223",
+            AdminAccount parimal = new AdminAccount(
+                    "u-admin-parimal",
+                    "Parimal Shete",
+                    "parimalmshete@gmail.com",
+                    "+91 92849 83072",
                     passwordSecurityUtil.hashPassword("admin123"),
-                    "Community Lead & Founder",
+                    "Co-Founder & Community Architect",
                     "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"
             );
-            admin.setBio("Social Shuffle Founder & Super Admin. Refers to database table for name and admin details.");
-            adminRepository.save(admin);
+            parimal.setBio("Social Shuffle Co-Founder & Community Architect.");
+            AdminAccount diksha = new AdminAccount(
+                    "u-admin-diksha",
+                    "Diksha",
+                    "diksha@socialshuffle.in",
+                    "+91 92849 83072",
+                    passwordSecurityUtil.hashPassword("admin123"),
+                    "Co-Founder & Experience Director",
+                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80"
+            );
+            diksha.setBio("Social Shuffle Co-Founder & Experience Director.");
+            adminRepository.saveAll(Arrays.asList(parimal, diksha));
         }
     }
 
     private void seedUsers() {
         if (userRepository.count() == 0) {
             String adminHash = passwordSecurityUtil.hashPassword("admin123");
-            User admin = new User("u-admin", "Aman Joshi (Host)", "admin@socialshuffle.com", "+91 98220 11223", adminHash, "admin", "Pune");
-            admin.setBio("Community Lead & Founder");
-            userRepository.save(admin);
+            User parimal = new User("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", adminHash, "admin", "Pune");
+            parimal.setBio("Co-Founder & Community Architect");
+            User diksha = new User("u-admin-diksha", "Diksha", "diksha@socialshuffle.in", "+91 92849 83072", adminHash, "admin", "Pune");
+            diksha.setBio("Co-Founder & Experience Director");
+            userRepository.saveAll(Arrays.asList(parimal, diksha));
         }
     }
 
@@ -137,12 +149,12 @@ public class DataSeeder implements CommandLineRunner {
 
     private void seedGames() {
         if (gameRepository.count() == 0) {
-            Game g1 = new Game("g-catan", "Catan", "Strategy", "3-4", "60-90 min", "Medium", "Aman Joshi", true, "Lane 6 Cafe", "The iconic resource trading game that started modern board gaming.");
+            Game g1 = new Game("g-catan", "Catan", "Strategy", "3-4", "60-90 min", "Medium", "Parimal Shete", true, "Lane 6 Cafe", "The iconic resource trading game that started modern board gaming.");
             Game g2 = new Game("g-avalon", "The Resistance: Avalon", "Social Deduction", "5-10", "30-45 min", "Easy", "Community Box", true, "Lane 6 Cafe", "Test loyalties, discover minions of Mordred, and embark on quests.");
             Game g3 = new Game("g-ticket", "Ticket to Ride: Europe", "Family Strategy", "2-5", "45-60 min", "Easy", "Parimal Shete", true, "FC Road Cafe", "Build train routes connecting iconic European cities.");
             Game g4 = new Game("g-codenames", "Codenames", "Party / Word", "4-8+", "15-20 min", "Easy", "Community Box", true, "Lane 6 Cafe", "Two rival spymasters know the secret identities of 25 agents.");
             Game g5 = new Game("g-splendor", "Splendor", "Engine Building", "2-4", "30 min", "Easy", "Rohan Kulkarni", true, "Baner Venue", "Renaissance merchants collecting gem tokens to acquire cards and nobles.");
-            Game g6 = new Game("g-wingspan", "Wingspan", "Engine Building", "1-5", "40-70 min", "Medium", "Aman Joshi", true, "Baner Venue", "Attract beautiful birds to your wildlife preserve.");
+            Game g6 = new Game("g-wingspan", "Wingspan", "Engine Building", "1-5", "40-70 min", "Medium", "Diksha", true, "Baner Venue", "Attract beautiful birds to your wildlife preserve.");
 
             gameRepository.saveAll(Arrays.asList(g1, g2, g3, g4, g5, g6));
         }
@@ -172,8 +184,8 @@ public class DataSeeder implements CommandLineRunner {
 
     private void seedAuditAndNotifications() {
         if (auditLogRepository.count() == 0) {
-            AuditLog log1 = new AuditLog("audit-1", "Aman Joshi (Host)", "Publish Meetup", "Event #35 created and published", "2026-09-20 10:00");
-            AuditLog log2 = new AuditLog("audit-2", "Aman Joshi (Host)", "Security Audit", "Enabled PBKDF2 password hashing & rate limiting defense", "2026-09-25 12:00");
+            AuditLog log1 = new AuditLog("audit-1", "Parimal Shete", "Publish Meetup", "Event #35 created and published", "2026-09-20 10:00");
+            AuditLog log2 = new AuditLog("audit-2", "Diksha", "Security Audit", "Enabled PBKDF2 password hashing & rate limiting defense", "2026-09-25 12:00");
             auditLogRepository.saveAll(Arrays.asList(log1, log2));
         }
 

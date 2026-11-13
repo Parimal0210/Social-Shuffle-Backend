@@ -391,7 +391,7 @@ export const generateEventWhatsAppNotification = (
     `👥 *Party Size:* ${pax} seat(s) reserved\n` +
     `🎫 *Digital QR Pass:* \`${qrToken}\`\n` +
     `⚡ *Check-in:* Show this message or your QR code at the reception desk for express entry!${note}\n\n` +
-    `_Need help reaching? Host Aman & Parimal are available for table guidance._\n` +
+    `_Need help reaching? Hosts Parimal & Diksha are available for table guidance._\n` +
     `See you on the board! 🏆`
   );
 };

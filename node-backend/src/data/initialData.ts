@@ -748,7 +748,7 @@ export const INITIAL_FEEDBACK: EventFeedback[] = [
     venueRating: 5,
     gameRating: 5,
     hostRating: 5,
-    suggestions: 'Super well organized by Aman and Parimal. The explanations were crisp and people were so friendly!',
+    suggestions: 'Super well organized by Parimal and Diksha. The explanations were crisp and people were so friendly!',
     createdAt: '2024-10-21T10:00:00Z'
   },
   {
@@ -841,7 +841,7 @@ export const INITIAL_ADMINS: AdminRecord[] = [
     id: 'u-admin-parimal',
     name: 'Parimal Shete',
     email: 'parimalmshete@gmail.com',
-    phone: '+91 98220 99887',
+    phone: '+91 92849 83072',
     role: 'admin',
     designation: 'Co-Founder & Community Architect',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
@@ -854,7 +854,7 @@ export const INITIAL_ADMINS: AdminRecord[] = [
     id: 'u-admin-parimal-work',
     name: 'Parimal Shete (Work)',
     email: 'parimal.work@gmail.com',
-    phone: '+91 98220 55443',
+    phone: '+91 92849 83072',
     role: 'admin',
     designation: 'Co-Founder',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
@@ -867,25 +867,12 @@ export const INITIAL_ADMINS: AdminRecord[] = [
     id: 'u-admin-diksha',
     name: 'Diksha',
     email: 'diksha@socialshuffle.in',
-    phone: '+91 98220 88776',
+    phone: '+91 92849 83072',
     role: 'admin',
     designation: 'Co-Founder & Experience Director',
     avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200',
     bio: 'Social Shuffle Co-Founder & Experience Director',
     area: 'Kalyani Nagar, Pune',
-    active: true,
-    createdAt: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: 'u-admin-aman',
-    name: 'Aman Joshi (Host)',
-    email: 'admin@socialshuffle.com',
-    phone: '+91 98220 11223',
-    role: 'admin',
-    designation: 'Community Host & Super Admin',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200',
-    bio: 'Social Shuffle Lead Host & Admin',
-    area: 'Viman Nagar, Pune',
     active: true,
     createdAt: '2024-01-01T00:00:00Z'
   }

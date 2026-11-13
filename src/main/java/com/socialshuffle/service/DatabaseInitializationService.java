@@ -79,7 +79,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
     private void seedAdminsIfEmpty() {
         if (adminRepository.count() == 0) {
             log.info("Seeding admins table in database...");
-            AdminAccount parimal = new AdminAccount("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 98220 99887", "admin123");
+            AdminAccount parimal = new AdminAccount("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", "admin123");
             parimal.setRole("admin");
             parimal.setDesignation("Co-Founder & Community Architect");
             parimal.setAvatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
@@ -87,7 +87,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
             parimal.setActive(true);
             parimal.setCreatedAt("2024-01-01T00:00:00Z");
 
-            AdminAccount parimalWork = new AdminAccount("u-admin-parimal-work", "Parimal Shete (Work)", "parimal.work@gmail.com", "+91 98220 55443", "admin123");
+            AdminAccount parimalWork = new AdminAccount("u-admin-parimal-work", "Parimal Shete (Work)", "parimal.work@gmail.com", "+91 92849 83072", "admin123");
             parimalWork.setRole("admin");
             parimalWork.setDesignation("Co-Founder");
             parimalWork.setAvatar("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200");
@@ -95,7 +95,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
             parimalWork.setActive(true);
             parimalWork.setCreatedAt("2024-01-01T00:00:00Z");
 
-            AdminAccount diksha = new AdminAccount("u-admin-diksha", "Diksha", "diksha@socialshuffle.in", "+91 98220 88776", "admin123");
+            AdminAccount diksha = new AdminAccount("u-admin-diksha", "Diksha", "diksha@socialshuffle.in", "+91 92849 83072", "admin123");
             diksha.setRole("admin");
             diksha.setDesignation("Co-Founder & Experience Director");
             diksha.setAvatar("https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200");
@@ -103,22 +103,14 @@ public class DatabaseInitializationService implements CommandLineRunner {
             diksha.setActive(true);
             diksha.setCreatedAt("2024-01-01T00:00:00Z");
 
-            AdminAccount aman = new AdminAccount("u-admin-aman", "Aman Joshi (Host)", "admin@socialshuffle.com", "+91 98220 11223", "admin123");
-            aman.setRole("admin");
-            aman.setDesignation("Community Host & Super Admin");
-            aman.setAvatar("https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200");
-            aman.setBio("Social Shuffle Lead Host & Admin");
-            aman.setActive(true);
-            aman.setCreatedAt("2024-01-01T00:00:00Z");
-
-            adminRepository.saveAll(Arrays.asList(parimal, parimalWork, diksha, aman));
+            adminRepository.saveAll(Arrays.asList(parimal, parimalWork, diksha));
         }
     }
 
     private void seedUsersIfEmpty() {
         if (userRepository.count() == 0) {
             log.info("Seeding users table in database with admin user...");
-            User u1 = new User("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 98220 99887", "admin123", "admin", "Koregaon Park");
+            User u1 = new User("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", "admin123", "admin", "Koregaon Park");
             u1.setAvatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
             u1.setBio("Co-Founder & Community Architect at Social Shuffle");
             u1.setAuthProvider("google");
@@ -135,7 +127,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
     private void seedVenuesIfEmpty() {
         if (venueRepository.count() == 0) {
             log.info("Seeding venues table in database...");
-            Venue v1 = new Venue("ven-1", "The Rustle Nest Cafe", "Lane 6, Koregaon Park, Pune, Maharashtra 411001", "Koregaon Park", 45, "+91 98220 11223", "https://maps.google.com/?q=The+Rustle+Nest+Cafe+Pune", "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=800", true);
+            Venue v1 = new Venue("ven-1", "The Rustle Nest Cafe", "Lane 6, Koregaon Park, Pune, Maharashtra 411001", "Koregaon Park", 45, "+91 92849 83072", "https://maps.google.com/?q=The+Rustle+Nest+Cafe+Pune", "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=800", true);
             Venue v2 = new Venue("ven-2", "Pagdandi Bookstore Cafe", "Shop 6, Regent Plaza, Baner - Pashan Link Rd, Pune 411045", "Baner", 35, "+91 98220 44556", "https://maps.google.com/?q=Pagdandi+Bookstore+Cafe+Baner", "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&q=80&w=800", true);
             Venue v3 = new Venue("ven-3", "Waari Book Cafe", "Ground Floor, Choice Institute, Kothrud, Pune 411038", "Kothrud", 50, "+91 98220 77889", "https://maps.google.com/?q=Waari+Book+Cafe+Kothrud", "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&q=80&w=800", true);
             venueRepository.saveAll(Arrays.asList(v1, v2, v3));
@@ -302,14 +294,14 @@ public class DatabaseInitializationService implements CommandLineRunner {
     private void seedAuditAndNotificationsIfEmpty() {
         if (auditLogRepository.count() == 0) {
             log.info("Seeding audit_logs table in database...");
-            AuditLog log1 = new AuditLog("log-1", "Aman Joshi (Host)", "SECURITY_INIT", "Database", "Direct DB query architecture activated across all domain entities", "2026-09-29T12:00:00Z");
+            AuditLog log1 = new AuditLog("log-1", "Parimal Shete", "SECURITY_INIT", "Database", "Direct DB query architecture activated across all domain entities", "2026-09-29T12:00:00Z");
             auditLogRepository.save(log1);
         }
 
         if (notificationRepository.count() == 0) {
             log.info("Seeding notifications table in database...");
             NotificationItem notif = new NotificationItem("notif-1", "Social Shuffle #35 Live", "Meetup announced for Koregaon Park. Registrations are open!", "event", "2026-09-29T12:00:00Z", false);
-            notif.setRecipientEmail("admin@socialshuffle.com");
+            notif.setRecipientEmail("parimalmshete@gmail.com");
             notif.setEventId("evt-35");
             notif.setDeliveryStatus("Sent");
             notificationRepository.save(notif);

@@ -54,3 +54,8 @@ credentials.json
 .DS_Store
 node_modules/
 .env
+.session_secret
+*.session_secret
+communications_config.json
+razorpay_config.json
+.ethereal_account.json
