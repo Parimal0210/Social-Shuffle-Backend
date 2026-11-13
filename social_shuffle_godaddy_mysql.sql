@@ -318,8 +318,7 @@ CREATE TABLE `notifications` (
 -- 1. Seed `admins`
 INSERT INTO `admins` (`id`, `name`, `email`, `phone`, `password`, `role`, `designation`, `avatar`, `bio`, `active`, `created_at`) VALUES
 ('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Community Architect', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Community Architect', 1, '2024-01-01T00:00:00Z'),
-('u-admin-parimal-work', 'Parimal Shete (Work)', 'parimal.work@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder', 1, '2024-01-01T00:00:00Z'),
-('u-admin-diksha', 'Diksha', 'diksha@socialshuffle.in', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Experience Director', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Experience Director', 1, '2024-01-01T00:00:00Z');
+('u-admin-diksha', 'Diksha', 'birladiksha01@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Experience Director', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Experience Director', 1, '2024-01-01T00:00:00Z');
 
 -- 2. Seed `users`
 INSERT INTO `users` (`id`, `name`, `email`, `phone`, `password`, `role`, `area`, `avatar`, `bio`, `participant_id`, `auth_provider`, `last_active_at`, `login_at`, `created_at`) VALUES
@@ -370,7 +369,7 @@ INSERT INTO `audit_logs` (`id`, `admin_name`, `action`, `target`, `details`, `de
 
 -- 12. Seed `notifications`
 INSERT INTO `notifications` (`id`, `title`, `message`, `type`, `channel`, `recipient_email`, `recipient_phone`, `event_id`, `delivery_status`, `whatsapp_status`, `timestamp`, `is_read`) VALUES
-('notif-1', 'Social Shuffle #35 Live', 'Meetup announced for Koregaon Park. Registrations are open!', 'event', 'dual', 'parimalmshete@gmail.com', '+91 92849 83072', 'evt-35', 'Sent', 'Delivered', '2026-09-29T12:00:00Z', 0);
+('notif-1', 'Social Shuffle #35 Live', 'Meetup announced for Koregaon Park. Registrations are open!', 'event', 'dual', 'birladiksha01@gmail.com', '+91 92849 83072', 'evt-35', 'Sent', 'Delivered', '2026-09-29T12:00:00Z', 0);
 
 SET FOREIGN_KEY_CHECKS = 1;
 -- ==============================================================================

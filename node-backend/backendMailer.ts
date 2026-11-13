@@ -88,10 +88,10 @@ export const loadCommunicationsConfig = (): CommunicationsConfig => {
           host: process.env.SMTP_HOST || parsed.email?.host || '',
           port: Number(process.env.SMTP_PORT || parsed.email?.port || 587),
           secure: Boolean(process.env.SMTP_SECURE === 'true' || parsed.email?.secure || false),
-          user: process.env.SMTP_USER || process.env.GMAIL_USER || parsed.email?.user || '',
+          user: process.env.SMTP_USER || process.env.GMAIL_USER || parsed.email?.user || 'socialshuffle.pune@gmail.com',
           pass: process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || parsed.email?.pass || '',
-          fromEmail: process.env.SMTP_FROM || parsed.email?.fromEmail || '"Social Shuffle Pune" <notifications@socialshuffle.in>',
-          replyTo: parsed.email?.replyTo || 'parimalmshete@gmail.com',
+          fromEmail: process.env.SMTP_FROM || parsed.email?.fromEmail || '"Social Shuffle Pune" <socialshuffle.pune@gmail.com>',
+          replyTo: parsed.email?.replyTo || 'socialshuffle.pune@gmail.com',
           lastTestedAt: parsed.email?.lastTestedAt || null,
           lastTestStatus: parsed.email?.lastTestStatus || null,
           etherealFallback: parsed.email?.etherealFallback !== false
@@ -121,10 +121,10 @@ export const loadCommunicationsConfig = (): CommunicationsConfig => {
       host: process.env.SMTP_HOST || '',
       port: Number(process.env.SMTP_PORT || 587),
       secure: process.env.SMTP_SECURE === 'true',
-      user: process.env.SMTP_USER || process.env.GMAIL_USER || '',
+      user: process.env.SMTP_USER || process.env.GMAIL_USER || 'socialshuffle.pune@gmail.com',
       pass: process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '',
-      fromEmail: process.env.SMTP_FROM || '"Social Shuffle Pune" <notifications@socialshuffle.in>',
-      replyTo: 'parimalmshete@gmail.com',
+      fromEmail: process.env.SMTP_FROM || '"Social Shuffle Pune" <socialshuffle.pune@gmail.com>',
+      replyTo: 'socialshuffle.pune@gmail.com',
       lastTestedAt: null,
       lastTestStatus: null,
       etherealFallback: true
@@ -298,7 +298,8 @@ export const sendOutboundEmail = async (req: OutboundMailRequest): Promise<Outbo
   if (activeGmailOAuthToken) {
     try {
       const utf8Email = [
-        `From: "Social Shuffle Pune" <${activeGmailOAuthEmail || 'me'}>`,
+        `From: "Social Shuffle Pune" <socialshuffle.pune@gmail.com>`,
+        `Reply-To: ${req.replyTo || config.email.replyTo || 'socialshuffle.pune@gmail.com'}`,
         `To: ${req.to}`,
         `Subject: =?utf-8?B?${Buffer.from(req.subject).toString('base64')}?=`,
         `MIME-Version: 1.0`,
@@ -344,12 +345,12 @@ export const sendOutboundEmail = async (req: OutboundMailRequest): Promise<Outbo
 
     try {
       const info = await transporter.sendMail({
-        from: config.email.fromEmail || '"Social Shuffle Pune" <notifications@socialshuffle.in>',
+        from: config.email.fromEmail || '"Social Shuffle Pune" <socialshuffle.pune@gmail.com>',
         to: req.to,
         subject: req.subject,
         html: req.html,
         text: req.text || req.subject,
-        replyTo: req.replyTo || config.email.replyTo || 'parimalmshete@gmail.com'
+        replyTo: req.replyTo || config.email.replyTo || 'socialshuffle.pune@gmail.com'
       });
 
       const previewUrl = nodemailer.getTestMessageUrl(info);
@@ -392,12 +393,12 @@ export const sendOutboundEmail = async (req: OutboundMailRequest): Promise<Outbo
         });
 
         const retryInfo = await etherealTransporter.sendMail({
-          from: config.email.fromEmail || '"Social Shuffle Pune" <notifications@socialshuffle.in>',
+          from: config.email.fromEmail || '"Social Shuffle Pune" <socialshuffle.pune@gmail.com>',
           to: req.to,
           subject: req.subject,
           html: req.html,
           text: req.text || req.subject,
-          replyTo: req.replyTo || config.email.replyTo || 'parimalmshete@gmail.com'
+          replyTo: req.replyTo || config.email.replyTo || 'socialshuffle.pune@gmail.com'
         });
 
         const previewUrl = nodemailer.getTestMessageUrl(retryInfo);

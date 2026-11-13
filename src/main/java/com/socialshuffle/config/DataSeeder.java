@@ -71,7 +71,7 @@ public class DataSeeder implements CommandLineRunner {
             AdminAccount diksha = new AdminAccount(
                     "u-admin-diksha",
                     "Diksha",
-                    "diksha@socialshuffle.in",
+                    "birladiksha01@gmail.com",
                     "+91 92849 83072",
                     passwordSecurityUtil.hashPassword("admin123"),
                     "Co-Founder & Experience Director",
@@ -87,7 +87,7 @@ public class DataSeeder implements CommandLineRunner {
             String adminHash = passwordSecurityUtil.hashPassword("admin123");
             User parimal = new User("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", adminHash, "admin", "Pune");
             parimal.setBio("Co-Founder & Community Architect");
-            User diksha = new User("u-admin-diksha", "Diksha", "diksha@socialshuffle.in", "+91 92849 83072", adminHash, "admin", "Pune");
+            User diksha = new User("u-admin-diksha", "Diksha", "birladiksha01@gmail.com", "+91 92849 83072", adminHash, "admin", "Pune");
             diksha.setBio("Co-Founder & Experience Director");
             userRepository.saveAll(Arrays.asList(parimal, diksha));
         }

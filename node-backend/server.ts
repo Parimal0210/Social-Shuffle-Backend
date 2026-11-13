@@ -481,15 +481,25 @@ async function startServer() {
     return safe;
   };
 
-  // Migrate admins store: remove Aman Joshi, enforce +91 92849 83072, and hash admin credentials with PBKDF2
+  const ADMIN_NOTIFICATION_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL || 'birladiksha01@gmail.com';
+
+  // Migrate admins store: keep Parimal (parimalmshete@gmail.com) and Diksha (birladiksha01@gmail.com), enforce +91 92849 83072, and hash admin credentials with PBKDF2
   const defaultAdminSeedPass = process.env.ADMIN_DEFAULT_PASSWORD || 'admin123';
   const cleanedAdmins = dbAdmins
     .getAll()
-    .filter((a: any) => a && a.id !== 'u-admin-aman' && String(a.email || '').trim().toLowerCase() !== 'admin@socialshuffle.com')
+    .filter(
+      (a: any) =>
+        a &&
+        a.id !== 'u-admin-aman' &&
+        a.id !== 'u-admin-parimal-work' &&
+        !['admin@socialshuffle.com', 'parimal.work@gmail.com'].includes(String(a.email || '').trim().toLowerCase())
+    )
     .map((a: any) => {
       const { password, ...rest } = a;
+      const resolvedEmail = a.id === 'u-admin-diksha' ? 'birladiksha01@gmail.com' : a.email;
       return {
         ...rest,
+        email: resolvedEmail,
         phone: '+91 92849 83072',
         passwordHash: a.passwordHash && String(a.passwordHash).startsWith('pbkdf2_sha512$')
           ? a.passwordHash
@@ -1865,7 +1875,7 @@ async function startServer() {
     try {
       const fbHtml = generateFeedbackAdminAlertEmailHtml(newFb);
       sendOutboundEmail({
-        to: 'parimalmshete@gmail.com',
+        to: ADMIN_NOTIFICATION_EMAIL,
         subject: `⭐ New Community Review: ${newFb.rating || 5}/5 Stars from ${newFb.userName || 'Attendee'}`,
         html: fbHtml,
         text: `New feedback received from ${newFb.userName || 'Attendee'}: ${newFb.rating} stars. Comments: ${newFb.comment || 'N/A'}`
@@ -1892,7 +1902,7 @@ async function startServer() {
     try {
       const alertHtml = generateReportAdminAlertEmailHtml(newRep);
       sendOutboundEmail({
-        to: 'parimalmshete@gmail.com',
+        to: ADMIN_NOTIFICATION_EMAIL,
         subject: `⚠️ [URGENT] Safety / Grievance Report: ${newRep.category || 'Incident'}`,
         html: alertHtml,
         text: `A safety / grievance report has been submitted by ${newRep.reporterName || 'Anonymous'}. Description: ${newRep.description || ''}`
@@ -1958,7 +1968,7 @@ async function startServer() {
     try {
       const alertHtml = generateVolunteerAdminAlertEmailHtml(newVol);
       sendOutboundEmail({
-        to: 'parimalmshete@gmail.com',
+        to: ADMIN_NOTIFICATION_EMAIL,
         subject: `🙋‍♂️ New Volunteer Application: ${newVol.name} (${newVol.preferredArea || 'Pune'})`,
         html: alertHtml,
         text: `New volunteer application received from ${newVol.name} (${newVol.email}, ${newVol.phone}).`
@@ -2451,7 +2461,7 @@ async function startServer() {
   });
 
   app.post('/api/communications/test-email', requireAdmin, async (req, res) => {
-    const targetRecipient = req.body.toEmail || req.body.to || req.body.email || 'parimalmshete@gmail.com';
+    const targetRecipient = req.body.toEmail || req.body.to || req.body.email || ADMIN_NOTIFICATION_EMAIL;
     const { subject = '🎲 Social Shuffle Test Email Dispatch', message = 'This is a live test email sent from the Social Shuffle Pune platform.' } = req.body;
     const toEmail = String(targetRecipient).trim();
     if (!toEmail) {

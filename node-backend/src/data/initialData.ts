@@ -851,22 +851,9 @@ export const INITIAL_ADMINS: AdminRecord[] = [
     createdAt: '2024-01-01T00:00:00Z'
   },
   {
-    id: 'u-admin-parimal-work',
-    name: 'Parimal Shete (Work)',
-    email: 'parimal.work@gmail.com',
-    phone: '+91 92849 83072',
-    role: 'admin',
-    designation: 'Co-Founder',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-    bio: 'Social Shuffle Co-Founder',
-    area: 'Baner, Pune',
-    active: true,
-    createdAt: '2024-01-01T00:00:00Z'
-  },
-  {
     id: 'u-admin-diksha',
     name: 'Diksha',
-    email: 'diksha@socialshuffle.in',
+    email: 'birladiksha01@gmail.com',
     phone: '+91 92849 83072',
     role: 'admin',
     designation: 'Co-Founder & Experience Director',

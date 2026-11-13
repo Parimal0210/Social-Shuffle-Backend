@@ -315,22 +315,9 @@ VALUES
     '2024-01-01T00:00:00Z'
 ),
 (
-    'u-admin-parimal-work',
-    'Parimal Shete (Work)',
-    'parimal.work@gmail.com',
-    '+91 92849 83072',
-    'admin123',
-    'admin',
-    'Co-Founder',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-    'Social Shuffle Co-Founder',
-    TRUE,
-    '2024-01-01T00:00:00Z'
-),
-(
     'u-admin-diksha',
     'Diksha',
-    'diksha@socialshuffle.in',
+    'birladiksha01@gmail.com',
     '+91 92849 83072',
     'admin123',
     'admin',
@@ -724,7 +711,7 @@ VALUES
     'Meetup announced for Koregaon Park. Registrations are open!',
     'event',
     'dual',
-    'parimalmshete@gmail.com',
+    'birladiksha01@gmail.com',
     '+91 92849 83072',
     'evt-35',
     'Sent',

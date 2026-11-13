@@ -572,7 +572,7 @@ export const generateWelcomeEmailHtml = (participantName: string, participantEma
     </div>
     <div class="footer">
       Social Shuffle Pune • Koregaon Park & Baner<br/>
-      Need help? Reach out directly to Parimal: parimalmshete@gmail.com
+      Need help? Reach out directly: socialshuffle.pune@gmail.com
     </div>
   </div>
 </body>
@@ -608,7 +608,7 @@ export const generateVolunteerConfirmationEmailHtml = (volunteer: any): string =
       </p>
     </div>
     <div style="padding:16px 24px;background-color:#050814;border-top:1px solid #1F305E;text-align:center;font-size:11px;color:#64748b;">
-      Social Shuffle Pune Community • parimalmshete@gmail.com
+      Social Shuffle Pune Community • socialshuffle.pune@gmail.com
     </div>
   </div>
 </body>
@@ -691,7 +691,7 @@ export const generateReportAckEmailHtml = (report: any): string => {
       <p>Our co-founders, Parimal and Diksha, are personally reviewing the details of your submission with complete discretion and confidentiality.</p>
     </div>
     <div style="padding:16px 24px;background-color:#050814;text-align:center;font-size:11px;color:#64748b;">
-      Social Shuffle Pune Grievance Desk • parimalmshete@gmail.com
+      Social Shuffle Pune Grievance Desk • socialshuffle.pune@gmail.com
     </div>
   </div>
 </body>

@@ -87,15 +87,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
             parimal.setActive(true);
             parimal.setCreatedAt("2024-01-01T00:00:00Z");
 
-            AdminAccount parimalWork = new AdminAccount("u-admin-parimal-work", "Parimal Shete (Work)", "parimal.work@gmail.com", "+91 92849 83072", "admin123");
-            parimalWork.setRole("admin");
-            parimalWork.setDesignation("Co-Founder");
-            parimalWork.setAvatar("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200");
-            parimalWork.setBio("Social Shuffle Co-Founder");
-            parimalWork.setActive(true);
-            parimalWork.setCreatedAt("2024-01-01T00:00:00Z");
-
-            AdminAccount diksha = new AdminAccount("u-admin-diksha", "Diksha", "diksha@socialshuffle.in", "+91 92849 83072", "admin123");
+            AdminAccount diksha = new AdminAccount("u-admin-diksha", "Diksha", "birladiksha01@gmail.com", "+91 92849 83072", "admin123");
             diksha.setRole("admin");
             diksha.setDesignation("Co-Founder & Experience Director");
             diksha.setAvatar("https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200");
@@ -103,7 +95,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
             diksha.setActive(true);
             diksha.setCreatedAt("2024-01-01T00:00:00Z");
 
-            adminRepository.saveAll(Arrays.asList(parimal, parimalWork, diksha));
+            adminRepository.saveAll(Arrays.asList(parimal, diksha));
         }
     }
 
@@ -301,7 +293,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
         if (notificationRepository.count() == 0) {
             log.info("Seeding notifications table in database...");
             NotificationItem notif = new NotificationItem("notif-1", "Social Shuffle #35 Live", "Meetup announced for Koregaon Park. Registrations are open!", "event", "2026-09-29T12:00:00Z", false);
-            notif.setRecipientEmail("parimalmshete@gmail.com");
+            notif.setRecipientEmail("birladiksha01@gmail.com");
             notif.setEventId("evt-35");
             notif.setDeliveryStatus("Sent");
             notificationRepository.save(notif);
