@@ -318,11 +318,14 @@ CREATE TABLE `notifications` (
 -- 1. Seed `admins`
 INSERT INTO `admins` (`id`, `name`, `email`, `phone`, `password`, `role`, `designation`, `avatar`, `bio`, `active`, `created_at`) VALUES
 ('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Community Architect', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Community Architect', 1, '2024-01-01T00:00:00Z'),
-('u-admin-diksha', 'Diksha', 'birladiksha01@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Experience Director', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Experience Director', 1, '2024-01-01T00:00:00Z');
+('u-admin-diksha', 'Diksha', 'birladiksha01@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Experience Director', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Experience Director', 1, '2024-01-01T00:00:00Z')
+ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `email`=VALUES(`email`), `phone`=VALUES(`phone`), `role`=VALUES(`role`), `designation`=VALUES(`designation`), `active`=VALUES(`active`);
 
 -- 2. Seed `users`
 INSERT INTO `users` (`id`, `name`, `email`, `phone`, `password`, `role`, `area`, `avatar`, `bio`, `participant_id`, `auth_provider`, `last_active_at`, `login_at`, `created_at`) VALUES
-('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Koregaon Park', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Co-Founder & Community Architect at Social Shuffle', NULL, 'google', '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z', '2024-01-01T00:00:00Z');
+('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Koregaon Park', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Co-Founder & Community Architect at Social Shuffle', NULL, 'google', '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z', '2024-01-01T00:00:00Z'),
+('u-admin-diksha', 'Diksha', 'birladiksha01@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Kalyani Nagar', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Co-Founder & Experience Director at Social Shuffle', NULL, 'google', '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z', '2024-01-01T00:00:00Z')
+ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `email`=VALUES(`email`), `phone`=VALUES(`phone`), `role`=VALUES(`role`), `area`=VALUES(`area`);
 
 -- 3. `participants` (Clean initial state: populated as real users register)
 

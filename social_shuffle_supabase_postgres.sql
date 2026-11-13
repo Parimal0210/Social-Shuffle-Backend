@@ -327,7 +327,15 @@ VALUES
     TRUE,
     '2024-01-01T00:00:00Z'
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    email = EXCLUDED.email,
+    phone = EXCLUDED.phone,
+    role = EXCLUDED.role,
+    designation = EXCLUDED.designation,
+    avatar = EXCLUDED.avatar,
+    bio = EXCLUDED.bio,
+    active = EXCLUDED.active;
 
 -- 2. Seed `users`
 INSERT INTO users (id, name, email, phone, password, role, area, avatar, bio, participant_id, auth_provider, last_active_at, login_at, created_at)
@@ -347,7 +355,31 @@ VALUES
     '2026-09-29T12:00:00Z',
     '2026-09-29T12:00:00Z',
     '2024-01-01T00:00:00Z'
-)ON CONFLICT (id) DO NOTHING;
+),
+(
+    'u-admin-diksha',
+    'Diksha',
+    'birladiksha01@gmail.com',
+    '+91 92849 83072',
+    'admin123',
+    'admin',
+    'Kalyani Nagar',
+    'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200',
+    'Co-Founder & Experience Director at Social Shuffle',
+    NULL,
+    'google',
+    '2026-09-29T12:00:00Z',
+    '2026-09-29T12:00:00Z',
+    '2024-01-01T00:00:00Z'
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    email = EXCLUDED.email,
+    phone = EXCLUDED.phone,
+    role = EXCLUDED.role,
+    area = EXCLUDED.area,
+    avatar = EXCLUDED.avatar,
+    bio = EXCLUDED.bio;
 
 -- 3. `participants` (Clean initial state: populated as real users register)
 

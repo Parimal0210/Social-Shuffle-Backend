@@ -77,38 +77,76 @@ public class DatabaseInitializationService implements CommandLineRunner {
     }
 
     private void seedAdminsIfEmpty() {
-        if (adminRepository.count() == 0) {
-            log.info("Seeding admins table in database...");
-            AdminAccount parimal = new AdminAccount("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", "admin123");
-            parimal.setRole("admin");
-            parimal.setDesignation("Co-Founder & Community Architect");
-            parimal.setAvatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
-            parimal.setBio("Social Shuffle Co-Founder & Community Architect");
-            parimal.setActive(true);
-            parimal.setCreatedAt("2024-01-01T00:00:00Z");
+        log.info("Verifying admins table in database...");
+        adminRepository.findById("u-admin-aman").ifPresent(adminRepository::delete);
+        adminRepository.findById("u-admin-parimal-work").ifPresent(adminRepository::delete);
 
-            AdminAccount diksha = new AdminAccount("u-admin-diksha", "Diksha", "birladiksha01@gmail.com", "+91 92849 83072", "admin123");
-            diksha.setRole("admin");
-            diksha.setDesignation("Co-Founder & Experience Director");
-            diksha.setAvatar("https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200");
-            diksha.setBio("Social Shuffle Co-Founder & Experience Director");
-            diksha.setActive(true);
-            diksha.setCreatedAt("2024-01-01T00:00:00Z");
-
-            adminRepository.saveAll(Arrays.asList(parimal, diksha));
+        AdminAccount parimal = adminRepository.findById("u-admin-parimal")
+                .orElseGet(() -> adminRepository.findByEmailIgnoreCase("parimalmshete@gmail.com")
+                .orElse(new AdminAccount("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", "admin123")));
+        parimal.setId("u-admin-parimal");
+        parimal.setName("Parimal Shete");
+        parimal.setEmail("parimalmshete@gmail.com");
+        parimal.setPhone("+91 92849 83072");
+        if (parimal.getPassword() == null || parimal.getPassword().isEmpty()) {
+            parimal.setPassword("admin123");
         }
+        parimal.setRole("admin");
+        parimal.setDesignation("Co-Founder & Community Architect");
+        parimal.setAvatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
+        parimal.setBio("Social Shuffle Co-Founder & Community Architect");
+        parimal.setActive(true);
+        if (parimal.getCreatedAt() == null) {
+            parimal.setCreatedAt("2024-01-01T00:00:00Z");
+        }
+
+        AdminAccount diksha = adminRepository.findById("u-admin-diksha")
+                .orElseGet(() -> adminRepository.findByEmailIgnoreCase("birladiksha01@gmail.com")
+                .orElse(new AdminAccount("u-admin-diksha", "Diksha", "birladiksha01@gmail.com", "+91 92849 83072", "admin123")));
+        diksha.setId("u-admin-diksha");
+        diksha.setName("Diksha");
+        diksha.setEmail("birladiksha01@gmail.com");
+        diksha.setPhone("+91 92849 83072");
+        if (diksha.getPassword() == null || diksha.getPassword().isEmpty()) {
+            diksha.setPassword("admin123");
+        }
+        diksha.setRole("admin");
+        diksha.setDesignation("Co-Founder & Experience Director");
+        diksha.setAvatar("https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200");
+        diksha.setBio("Social Shuffle Co-Founder & Experience Director");
+        diksha.setActive(true);
+        if (diksha.getCreatedAt() == null) {
+            diksha.setCreatedAt("2024-01-01T00:00:00Z");
+        }
+
+        adminRepository.saveAll(Arrays.asList(parimal, diksha));
     }
 
     private void seedUsersIfEmpty() {
-        if (userRepository.count() == 0) {
-            log.info("Seeding users table in database with admin user...");
-            User u1 = new User("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", "admin123", "admin", "Koregaon Park");
-            u1.setAvatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
-            u1.setBio("Co-Founder & Community Architect at Social Shuffle");
-            u1.setAuthProvider("google");
+        log.info("Verifying admin accounts in users table...");
+        User parimalUser = userRepository.findById("u-admin-parimal")
+                .orElseGet(() -> userRepository.findByEmailIgnoreCase("parimalmshete@gmail.com")
+                .orElse(new User("u-admin-parimal", "Parimal Shete", "parimalmshete@gmail.com", "+91 92849 83072", "admin123", "admin", "Koregaon Park")));
+        parimalUser.setName("Parimal Shete");
+        parimalUser.setEmail("parimalmshete@gmail.com");
+        parimalUser.setPhone("+91 92849 83072");
+        parimalUser.setRole("admin");
+        parimalUser.setAvatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
+        parimalUser.setBio("Co-Founder & Community Architect at Social Shuffle");
+        parimalUser.setAuthProvider("google");
 
-            userRepository.save(u1);
-        }
+        User dikshaUser = userRepository.findById("u-admin-diksha")
+                .orElseGet(() -> userRepository.findByEmailIgnoreCase("birladiksha01@gmail.com")
+                .orElse(new User("u-admin-diksha", "Diksha", "birladiksha01@gmail.com", "+91 92849 83072", "admin123", "admin", "Kalyani Nagar")));
+        dikshaUser.setName("Diksha");
+        dikshaUser.setEmail("birladiksha01@gmail.com");
+        dikshaUser.setPhone("+91 92849 83072");
+        dikshaUser.setRole("admin");
+        dikshaUser.setAvatar("https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200");
+        dikshaUser.setBio("Co-Founder & Experience Director at Social Shuffle");
+        dikshaUser.setAuthProvider("google");
+
+        userRepository.saveAll(Arrays.asList(parimalUser, dikshaUser));
     }
 
     private void seedParticipantsIfEmpty() {

@@ -506,7 +506,21 @@ async function startServer() {
           : hashPassword(password || defaultAdminSeedPass)
       };
     });
-  dbAdmins.setAll(cleanedAdmins.length > 0 ? cleanedAdmins : INITIAL_ADMINS.map(a => ({ ...a, passwordHash: hashPassword(defaultAdminSeedPass) })) as any);
+  const migratedAdmins = [...cleanedAdmins];
+  for (const initAdmin of INITIAL_ADMINS) {
+    const exists = migratedAdmins.some(
+      (a: any) =>
+        a.id === initAdmin.id ||
+        String(a.email || '').trim().toLowerCase() === initAdmin.email.trim().toLowerCase()
+    );
+    if (!exists) {
+      migratedAdmins.push({
+        ...initAdmin,
+        passwordHash: hashPassword(defaultAdminSeedPass)
+      });
+    }
+  }
+  dbAdmins.setAll(migratedAdmins as any);
 
   // Migrate participants store: convert any legacy plaintext passwords into salted PBKDF2 hashes
   const migratedParticipants = dbParticipants.getAll().map((p: any) => {

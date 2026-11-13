@@ -253,14 +253,15 @@ public class AuthController {
         Optional<AdminAccount> adminOpt = adminRepository.findByEmailIgnoreCase(email);
         if (adminOpt.isPresent()) {
             AdminAccount admin = adminOpt.get();
-            User adminUser = new User("u-admin", admin.getName(), admin.getEmail(), admin.getPhone(), "", "admin", "Pune");
+            String adminUserId = admin.getId() != null ? admin.getId() : "u-admin-parimal";
+            User adminUser = new User(adminUserId, admin.getName(), admin.getEmail(), admin.getPhone(), "", "admin", "Pune");
             adminUser.setAvatar(req.getAvatar() != null ? req.getAvatar() : admin.getAvatar());
             adminUser.setBio(admin.getBio());
             adminUser.setAuthProvider("google");
             adminUser.setLoginAt(java.time.Instant.now().toString());
             adminUser.setLastActiveAt(java.time.Instant.now().toString());
 
-            String token = securityTokenService.generateToken("u-admin", "admin");
+            String token = securityTokenService.generateToken(adminUserId, "admin");
             return ResponseEntity.ok(new AuthResponse(token, adminUser, null, "Google Admin authentication successful"));
         }
 
