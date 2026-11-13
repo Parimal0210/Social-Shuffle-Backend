@@ -655,10 +655,50 @@ async function startServer() {
     }
 
     if (!record) {
-      return res.status(404).json({
-        success: false,
-        code: 'USER_NOT_REGISTERED',
-        message: 'Username not registered'
+      // Check if participant exists in dbParticipants by email (e.g. registered via Email OTP form)
+      const existingParticipant = dbParticipants.getAll().find(
+        (p: any) => p.email && String(p.email).trim().toLowerCase() === cleanEmail
+      );
+
+      if (!existingParticipant) {
+        return res.status(404).json({
+          success: false,
+          code: 'USER_NOT_REGISTERED',
+          message: 'Username not registered'
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const restoredUser = {
+        id: `u-${existingParticipant.id}`,
+        name: existingParticipant.name,
+        email: cleanEmail,
+        phone: existingParticipant.phone,
+        role: 'participant',
+        area: existingParticipant.area,
+        participantId: existingParticipant.id,
+        avatar: req.body.avatar || existingParticipant.avatar,
+        bio: existingParticipant.bio,
+        authProvider: 'google',
+        loginAt: nowIso,
+        lastActiveAt: nowIso
+      };
+
+      registeredGoogleUsers.set(cleanEmail, {
+        email: cleanEmail,
+        googleId: req.body.googleId || `g_${cleanEmail}`,
+        participant: existingParticipant,
+        user: restoredUser,
+        registeredAt: existingParticipant.joinedDate || nowIso
+      });
+      saveGoogleUsers();
+
+      return res.json({
+        success: true,
+        message: `Welcome back, ${restoredUser.name}!`,
+        token: `tok_g_${restoredUser.id}`,
+        user: restoredUser,
+        participant: existingParticipant
       });
     }
 
@@ -688,40 +728,51 @@ async function startServer() {
     const cleanName = String(name).trim();
     const nowIso = new Date().toISOString();
 
-    const participantId = `p-google-${Date.now().toString(36)}`;
+    const existingParticipant = dbParticipants.getAll().find(
+      (p: any) => p.email && String(p.email).trim().toLowerCase() === cleanEmail
+    );
+
+    const participantId = existingParticipant?.id || `p-google-${Date.now().toString(36)}`;
     const userId = `u-${participantId}`;
 
-    const participant = {
-      id: participantId,
-      name: cleanName,
-      email: cleanEmail,
-      phone: phone || '+91 98220 ' + Math.floor(10000 + Math.random() * 90000),
-      area: area || 'Koregaon Park',
-      avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanName)}`,
-      bio: bio || 'Pune board gamer • Connected via Google Account',
-      joinedDate: nowIso.slice(0, 10),
-      totalEventsAttended: 0,
-      totalRegistrations: 0,
-      gamesPlayedIds: [],
-      venuesVisited: [],
-      totalPaxBrought: 0,
-      authProvider: 'google',
-      registeredAt: nowIso
-    };
+    const participant = existingParticipant
+      ? {
+          ...existingParticipant,
+          name: existingParticipant.name || cleanName,
+          avatar: avatar || existingParticipant.avatar,
+          authProvider: 'google'
+        }
+      : {
+          id: participantId,
+          name: cleanName,
+          email: cleanEmail,
+          phone: phone || '+91 98220 ' + Math.floor(10000 + Math.random() * 90000),
+          area: area || 'Koregaon Park',
+          avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanName)}`,
+          bio: bio || 'Pune board gamer • Connected via Google Account',
+          joinedDate: nowIso.slice(0, 10),
+          totalEventsAttended: 0,
+          totalRegistrations: 0,
+          gamesPlayedIds: [],
+          venuesVisited: [],
+          totalPaxBrought: 0,
+          authProvider: 'google',
+          registeredAt: nowIso
+        };
 
     const adminCheck = findAdminByEmailOrPhone(cleanEmail);
     const assignedRole = (adminCheck && adminCheck.role === 'admin') ? 'admin' : 'participant';
 
     const user = {
       id: adminCheck ? adminCheck.id : userId,
-      name: adminCheck?.name || cleanName,
+      name: adminCheck?.name || participant.name || cleanName,
       email: cleanEmail,
       phone: adminCheck?.phone || participant.phone,
       role: assignedRole,
       designation: adminCheck?.designation,
       adminRole: adminCheck ? 'Super Admin' : undefined,
       status: adminCheck ? 'Active Verified Administrator' : undefined,
-      joinedDate: adminCheck?.createdAt || nowIso.slice(0, 10),
+      joinedDate: adminCheck?.createdAt || participant.joinedDate || nowIso.slice(0, 10),
       permissions: adminCheck ? ['events', 'attendance', 'crm', 'games', 'broadcasts', 'finance', 'reports', 'settings', 'audit'] : undefined,
       area: adminCheck?.area || participant.area || 'Koregaon Park, Pune',
       avatar: adminCheck?.avatar || participant.avatar,
@@ -732,8 +783,12 @@ async function startServer() {
       lastActiveAt: nowIso
     };
 
-    // Store in participants DB
-    dbParticipants.insert(participant);
+    // Store or update in participants DB without duplicates
+    if (existingParticipant) {
+      dbParticipants.update(existingParticipant.id, participant);
+    } else {
+      dbParticipants.insert(participant);
+    }
 
     // Store in google users DB
     registeredGoogleUsers.set(cleanEmail, {
