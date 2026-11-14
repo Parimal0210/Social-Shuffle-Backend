@@ -33,6 +33,7 @@ public class RegistrationController {
     private final UserCredentialRepository userCredentialRepository;
     private final EmailNotificationService emailNotificationService;
     private final CacheManager cacheManager;
+    private final PasswordSecurityUtil passwordSecurityUtil;
 
     public RegistrationController(RegistrationRepository registrationRepository,
                                   ParticipantRepository participantRepository,
@@ -41,7 +42,8 @@ public class RegistrationController {
                                   UserRepository userRepository,
                                   UserCredentialRepository userCredentialRepository,
                                   EmailNotificationService emailNotificationService,
-                                  CacheManager cacheManager) {
+                                  CacheManager cacheManager,
+                                  PasswordSecurityUtil passwordSecurityUtil) {
         this.registrationRepository = registrationRepository;
         this.participantRepository = participantRepository;
         this.gameRepository = gameRepository;
@@ -50,6 +52,7 @@ public class RegistrationController {
         this.userCredentialRepository = userCredentialRepository;
         this.emailNotificationService = emailNotificationService;
         this.cacheManager = cacheManager;
+        this.passwordSecurityUtil = passwordSecurityUtil;
     }
 
     private boolean isAdmin(HttpServletRequest request) {
@@ -558,7 +561,7 @@ public class RegistrationController {
             participant = participantRepository.save(np);
 
             if (!email.isEmpty() && userCredentialRepository.findByEmailIgnoreCase(email).isEmpty()) {
-                String randomHash = PasswordSecurityUtil.hashPassword(UUID.randomUUID().toString());
+                String randomHash = passwordSecurityUtil.hashPassword(UUID.randomUUID().toString());
                 User u = new User();
                 u.setId("usr-" + UUID.randomUUID().toString().substring(0, 8));
                 u.setName(name);
@@ -572,16 +575,15 @@ public class RegistrationController {
                 userRepository.save(u);
 
                 UserCredential cred = new UserCredential();
-                cred.setId("cred-" + UUID.randomUUID().toString().substring(0, 8));
+                cred.setUserId("cred-" + UUID.randomUUID().toString().substring(0, 8));
                 cred.setSubjectType("participant");
                 cred.setSubjectId(participant.getId());
-                cred.setName(name);
                 cred.setEmail(email);
                 cred.setPhone(phone);
+                cred.setUsername(email.contains("@") ? email.substring(0, email.indexOf('@')) : name.toLowerCase());
                 cred.setPasswordHash(randomHash);
-                cred.setRole("participant");
-                cred.setArea(area);
                 cred.setAuthProvider("walk-in");
+                cred.setFailedAttempts(0);
                 cred.setCreatedAt(now);
                 cred.setUpdatedAt(now);
                 userCredentialRepository.save(cred);

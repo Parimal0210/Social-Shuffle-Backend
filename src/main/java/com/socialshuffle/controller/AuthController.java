@@ -464,8 +464,7 @@ public class AuthController {
             AdminAccount a = adminOpt.get();
             User adminUser = new User(a.getId(), a.getName(), a.getEmail(), a.getPhone(), "", "admin", a.getArea() != null ? a.getArea() : "Pune");
             adminUser.setAvatar(identity.avatar() != null && !identity.avatar().isEmpty() ? identity.avatar() : a.getAvatar());
-            adminUser.setBio(a.getBio());
-            adminUser.setDesignation(a.getDesignation());
+            adminUser.setBio(a.getBio() != null ? a.getBio() : a.getDesignation());
             adminUser.setAuthProvider("google");
             adminUser.setLoginAt(nowIso);
             adminUser.setLastActiveAt(nowIso);
@@ -526,8 +525,7 @@ public class AuthController {
             AdminAccount a = adminOpt.get();
             User adminUser = new User(a.getId(), a.getName(), a.getEmail(), a.getPhone(), "", "admin", a.getArea() != null ? a.getArea() : "Pune");
             adminUser.setAvatar(identity.avatar() != null && !identity.avatar().isEmpty() ? identity.avatar() : a.getAvatar());
-            adminUser.setBio(a.getBio());
-            adminUser.setDesignation(a.getDesignation());
+            adminUser.setBio(a.getBio() != null ? a.getBio() : a.getDesignation());
             adminUser.setAuthProvider("google");
             adminUser.setLoginAt(nowIso);
             adminUser.setLastActiveAt(nowIso);
@@ -689,8 +687,7 @@ public class AuthController {
                 AdminAccount a = adminOpt.get();
                 User adminUser = new User(a.getId(), a.getName(), a.getEmail(), a.getPhone(), "", "admin", a.getArea() != null ? a.getArea() : "Pune");
                 adminUser.setAvatar(a.getAvatar());
-                adminUser.setBio(a.getBio());
-                adminUser.setDesignation(a.getDesignation());
+                adminUser.setBio(a.getBio() != null ? a.getBio() : a.getDesignation());
                 Map<String, Object> resp = new LinkedHashMap<>();
                 resp.put("success", true);
                 resp.put("isAuthenticated", true);

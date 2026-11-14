@@ -181,14 +181,10 @@ public class ParticipantController {
                 u.setPhone(saved.getPhone());
                 u.setArea(saved.getArea());
                 u.setAvatar(saved.getAvatar());
-                if (saved.getUsername() != null) u.setUsername(saved.getUsername());
                 userRepository.save(u);
             });
             userCredentialRepository.findByEmailIgnoreCase(saved.getEmail()).ifPresent(c -> {
-                c.setName(saved.getName());
                 c.setPhone(saved.getPhone());
-                c.setArea(saved.getArea());
-                c.setAvatar(saved.getAvatar());
                 if (saved.getUsername() != null) c.setUsername(saved.getUsername());
                 c.setUpdatedAt(now);
                 userCredentialRepository.save(c);

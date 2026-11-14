@@ -130,12 +130,13 @@ public class DatabaseInitializationService implements CommandLineRunner {
         if (admin.getCreatedAt() == null) admin.setCreatedAt("2024-01-01T00:00:00Z");
         adminRepository.save(admin);
 
+        final String resolvedPwdHash = pwdHash;
         // Keep users table synced
         User user = userRepository.findByEmailIgnoreCase(email)
-                .orElseGet(() -> new User(admin.getId(), name, email, phone, pwdHash, "admin", area));
+                .orElseGet(() -> new User(admin.getId(), name, email, phone, resolvedPwdHash, "admin", area));
         user.setName(name);
         user.setPhone(phone);
-        user.setPassword(pwdHash);
+        user.setPassword(resolvedPwdHash);
         user.setRole("admin");
         user.setArea(area);
         user.setAvatar(avatar);
