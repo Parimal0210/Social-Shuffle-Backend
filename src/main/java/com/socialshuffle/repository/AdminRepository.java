@@ -12,6 +12,8 @@ import java.util.Optional;
 @Repository
 public interface AdminRepository extends JpaRepository<AdminAccount, String> {
 
+    List<AdminAccount> findByActiveTrue();
+
     Optional<AdminAccount> findByEmailIgnoreCase(String email);
 
     Optional<AdminAccount> findFirstByPhone(String phone);

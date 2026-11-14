@@ -1,5 +1,7 @@
 package com.socialshuffle.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.io.Serializable;
 import java.util.Objects;
@@ -29,6 +31,8 @@ public class EventFeedback implements Serializable {
     @Column(name = "participant_name")
     private String participantName;
 
+    @JsonProperty("isAnonymous")
+    @JsonAlias({"isAnonymous", "anonymous"})
     @Column(name = "anonymous", nullable = false)
     private boolean anonymous = false;
 
@@ -49,6 +53,12 @@ public class EventFeedback implements Serializable {
 
     @Column(name = "created_at", length = 50)
     private String createdAt;
+
+    @Column(name = "submitted_at", length = 50)
+    private String submittedAt;
+
+    @Column(name = "extra_json", columnDefinition = "TEXT")
+    private String extraJson;
 
     public EventFeedback() {
     }
@@ -147,6 +157,22 @@ public class EventFeedback implements Serializable {
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getSubmittedAt() {
+        return submittedAt != null ? submittedAt : createdAt;
+    }
+
+    public void setSubmittedAt(String submittedAt) {
+        this.submittedAt = submittedAt;
+    }
+
+    public String getExtraJson() {
+        return extraJson;
+    }
+
+    public void setExtraJson(String extraJson) {
+        this.extraJson = extraJson;
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.socialshuffle.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.io.Serializable;
 import java.util.Objects;
@@ -35,6 +37,8 @@ public class SafetyReport implements Serializable {
     @Column(name = "person_involved")
     private String personInvolved;
 
+    @JsonProperty("isAnonymous")
+    @JsonAlias({"isAnonymous", "anonymous"})
     @Column(name = "anonymous", nullable = false)
     private boolean anonymous = false;
 
@@ -44,14 +48,26 @@ public class SafetyReport implements Serializable {
     @Column(name = "reporter_contact", length = 100)
     private String reporterContact;
 
+    @Column(name = "reporter_email", length = 150)
+    private String reporterEmail;
+
+    @Column(name = "category", length = 100)
+    private String category;
+
     @Column(name = "status", length = 30)
     private String status = "New"; // New, Investigating, Resolved
 
     @Column(name = "resolution_notes", columnDefinition = "TEXT")
     private String resolutionNotes;
 
+    @Column(name = "admin_notes", columnDefinition = "TEXT")
+    private String adminNotes;
+
     @Column(name = "created_at", length = 50)
     private String createdAt;
+
+    @Column(name = "submitted_at", length = 50)
+    private String submittedAt;
 
     public SafetyReport() {
     }
@@ -152,12 +168,44 @@ public class SafetyReport implements Serializable {
         this.resolutionNotes = resolutionNotes;
     }
 
+    public String getReporterEmail() {
+        return reporterEmail;
+    }
+
+    public void setReporterEmail(String reporterEmail) {
+        this.reporterEmail = reporterEmail;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public String getAdminNotes() {
+        return adminNotes;
+    }
+
+    public void setAdminNotes(String adminNotes) {
+        this.adminNotes = adminNotes;
+    }
+
     public String getCreatedAt() {
         return createdAt;
     }
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getSubmittedAt() {
+        return submittedAt != null ? submittedAt : createdAt;
+    }
+
+    public void setSubmittedAt(String submittedAt) {
+        this.submittedAt = submittedAt;
     }
 
     @Override

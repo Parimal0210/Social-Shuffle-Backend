@@ -8,17 +8,19 @@
 -- ------------------------------------------------------------------------------
 -- 1. Table structure for table: admins
 -- Dedicated admin table for administrator role validation, permissions, and co-founders
+-- Password hashes use salted PBKDF2WithHmacSHA256 (`pbkdf2:...`), initialized by DatabaseInitializationService
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS admins (
     id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     phone VARCHAR(50),
-    password VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL DEFAULT '',
     role VARCHAR(50) DEFAULT 'admin',
     designation VARCHAR(100) DEFAULT 'Community Lead & Founder',
     avatar TEXT,
     bio TEXT,
+    area VARCHAR(255) DEFAULT 'Koregaon Park, Pune',
     active BOOLEAN DEFAULT TRUE,
     created_at VARCHAR(50)
 );
@@ -28,6 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_admins_email ON admins (email);
 
 -- ------------------------------------------------------------------------------
 -- 2. Table structure for table: users
+-- Spring Boot JPA authentication table (stores PBKDF2-hashed passwords, never plaintext)
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(64) PRIMARY KEY,
@@ -35,7 +38,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(150) NOT NULL UNIQUE,
     phone VARCHAR(50),
     password VARCHAR(255),
-    role VARCHAR(30) DEFAULT 'participant',
+    role VARCHAR(30),
     area VARCHAR(255),
     avatar TEXT,
     bio TEXT,
@@ -46,19 +49,45 @@ CREATE TABLE IF NOT EXISTS users (
     created_at VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
-CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
-CREATE INDEX IF NOT EXISTS idx_users_participant_id ON users (participant_id);
+CREATE INDEX IF NOT EXISTS idx_user_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_user_phone ON users (phone);
+CREATE INDEX IF NOT EXISTS idx_user_role ON users (role);
+CREATE INDEX IF NOT EXISTS idx_user_part_id ON users (participant_id);
 
 -- ------------------------------------------------------------------------------
--- 3. Table structure for table: participants
+-- 3. Table structure for table: user_credentials
+-- Dedicated credentials vault storing salted PBKDF2-HMAC-SHA512 password hashes & lockout state
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_credentials (
+    user_id VARCHAR(64) PRIMARY KEY,
+    subject_type VARCHAR(20) NOT NULL CHECK (subject_type IN ('admin', 'participant')),
+    subject_id VARCHAR(64) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    phone VARCHAR(50) DEFAULT '',
+    username VARCHAR(150) DEFAULT '',
+    password_hash TEXT,
+    auth_provider VARCHAR(30) DEFAULT 'local',
+    failed_attempts INTEGER DEFAULT 0,
+    locked_until BIGINT,
+    last_login_at VARCHAR(50),
+    password_updated_at VARCHAR(50),
+    created_at VARCHAR(50) NOT NULL,
+    updated_at VARCHAR(50) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_creds_email ON user_credentials (email);
+CREATE INDEX IF NOT EXISTS idx_creds_phone ON user_credentials (phone);
+CREATE INDEX IF NOT EXISTS idx_creds_subject ON user_credentials (subject_type, subject_id);
+
+-- ------------------------------------------------------------------------------
+-- 4. Table structure for table: participants
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS participants (
     id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255),
     email VARCHAR(150) NOT NULL UNIQUE,
     phone VARCHAR(50),
-    password VARCHAR(255) DEFAULT 'shuffler123',
+    password VARCHAR(255),
     username VARCHAR(150),
     area VARCHAR(255),
     avatar TEXT,
@@ -70,7 +99,11 @@ CREATE TABLE IF NOT EXISTS participants (
     venues_visited TEXT,
     total_pax_brought INTEGER DEFAULT 0,
     last_attended_event_id VARCHAR(64),
-    last_attended_event_title VARCHAR(255)
+    last_attended_event_title VARCHAR(255),
+    auth_provider VARCHAR(30) DEFAULT 'local',
+    registered_at VARCHAR(50),
+    created_at VARCHAR(50),
+    updated_at VARCHAR(50)
 );
 
 CREATE INDEX IF NOT EXISTS idx_participants_phone ON participants (phone);
@@ -78,7 +111,7 @@ CREATE INDEX IF NOT EXISTS idx_participants_area ON participants (area);
 CREATE INDEX IF NOT EXISTS idx_participants_email ON participants (email);
 
 -- ------------------------------------------------------------------------------
--- 4. Table structure for table: venues
+-- 5. Table structure for table: venues
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS venues (
     id VARCHAR(64) PRIMARY KEY,
@@ -96,7 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_venues_area ON venues (area);
 CREATE INDEX IF NOT EXISTS idx_venues_active ON venues (active);
 
 -- ------------------------------------------------------------------------------
--- 5. Table structure for table: events
+-- 6. Table structure for table: events
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS events (
     id VARCHAR(64) PRIMARY KEY,
@@ -114,14 +147,19 @@ CREATE TABLE IF NOT EXISTS events (
     notes TEXT,
     planned_games TEXT,
     status VARCHAR(50) DEFAULT 'upcoming',
-    cover_image TEXT
+    cover_image TEXT,
+    map_location TEXT,
+    registered_count INTEGER DEFAULT 0,
+    checked_in_count INTEGER DEFAULT 0,
+    created_at VARCHAR(50),
+    updated_at VARCHAR(50)
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_date ON events (date);
 CREATE INDEX IF NOT EXISTS idx_events_status ON events (status);
 
 -- ------------------------------------------------------------------------------
--- 6. Table structure for table: games
+-- 7. Table structure for table: games
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS games (
     id VARCHAR(64) PRIMARY KEY,
@@ -139,14 +177,16 @@ CREATE TABLE IF NOT EXISTS games (
     owner VARCHAR(100),
     venue VARCHAR(255),
     available BOOLEAN DEFAULT TRUE,
-    current_location VARCHAR(255)
+    current_location VARCHAR(255),
+    created_at VARCHAR(50),
+    updated_at VARCHAR(50)
 );
 
 CREATE INDEX IF NOT EXISTS idx_games_category ON games (category);
 CREATE INDEX IF NOT EXISTS idx_games_active ON games (active);
 
 -- ------------------------------------------------------------------------------
--- 7. Table structure for table: badge_levels
+-- 8. Table structure for table: badge_levels
 -- Stores the 10 badge progression tiers
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS badge_levels (
@@ -168,7 +208,7 @@ CREATE TABLE IF NOT EXISTS badge_levels (
 );
 
 -- ------------------------------------------------------------------------------
--- 8. Table structure for table: participant_badges
+-- 9. Table structure for table: participant_badges
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS participant_badges (
     id VARCHAR(64) PRIMARY KEY,
@@ -184,7 +224,7 @@ CREATE INDEX IF NOT EXISTS idx_pbadges_part ON participant_badges (participant_i
 CREATE INDEX IF NOT EXISTS idx_pbadges_lvl ON participant_badges (badge_level);
 
 -- ------------------------------------------------------------------------------
--- 9. Table structure for table: registrations
+-- 10. Table structure for table: registrations
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS registrations (
     id VARCHAR(64) PRIMARY KEY,
@@ -201,64 +241,98 @@ CREATE TABLE IF NOT EXISTS registrations (
     amount_paid DOUBLE PRECISION DEFAULT 350.0,
     attendance_status VARCHAR(50) DEFAULT 'Registered',
     check_in_time VARCHAR(50),
+    checked_in_at VARCHAR(50),
+    games_played TEXT DEFAULT '[]',
     ticket_code VARCHAR(100),
     registered_at VARCHAR(50),
     qr_code_token VARCHAR(100),
+    qr_code_url TEXT,
+    razorpay_payment_id VARCHAR(100),
+    razorpay_order_id VARCHAR(100),
     email_sent BOOLEAN DEFAULT FALSE,
-    email_sent_at VARCHAR(50)
+    email_sent_at VARCHAR(50),
+    notes TEXT,
+    created_at VARCHAR(50),
+    updated_at VARCHAR(50)
 );
 
 CREATE INDEX IF NOT EXISTS idx_registrations_event_id ON registrations (event_id);
 CREATE INDEX IF NOT EXISTS idx_registrations_participant_id ON registrations (participant_id);
 
 -- ------------------------------------------------------------------------------
--- 10. Table structure for table: feedback
+-- 11. Table structure for table: event_feedback
 -- ------------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS feedback (
+CREATE TABLE IF NOT EXISTS event_feedback (
+    id VARCHAR(64) PRIMARY KEY,
+    event_id VARCHAR(64) NOT NULL,
+    event_title VARCHAR(255),
+    participant_id VARCHAR(64),
+    participant_name VARCHAR(255),
+    anonymous BOOLEAN NOT NULL DEFAULT FALSE,
+    overall_rating INTEGER DEFAULT 5,
+    venue_rating INTEGER DEFAULT 5,
+    game_rating INTEGER DEFAULT 5,
+    host_rating INTEGER DEFAULT 5,
+    suggestions TEXT,
+    created_at VARCHAR(50),
+    submitted_at VARCHAR(50),
+    extra_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_event_id ON event_feedback (event_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_participant ON event_feedback (participant_id);
+
+-- ------------------------------------------------------------------------------
+-- 12. Table structure for table: safety_reports
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS safety_reports (
     id VARCHAR(64) PRIMARY KEY,
     event_id VARCHAR(64),
-    participant_name VARCHAR(255),
-    rating INTEGER DEFAULT 5,
-    comments TEXT,
-    favorite_game VARCHAR(255),
-    venue_rating INTEGER DEFAULT 5,
+    event_title VARCHAR(255),
+    type VARCHAR(64),
+    description TEXT,
+    date_time VARCHAR(50),
+    person_involved VARCHAR(255),
+    anonymous BOOLEAN NOT NULL DEFAULT FALSE,
+    reporter_name VARCHAR(255),
+    reporter_contact VARCHAR(100),
+    reporter_email VARCHAR(150),
+    category VARCHAR(100),
+    status VARCHAR(30) DEFAULT 'New',
+    resolution_notes TEXT,
+    admin_notes TEXT,
+    created_at VARCHAR(50),
     submitted_at VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_feedback_event_id ON feedback (event_id);
+CREATE INDEX IF NOT EXISTS idx_safety_status ON safety_reports (status);
+CREATE INDEX IF NOT EXISTS idx_safety_event ON safety_reports (event_id);
 
 -- ------------------------------------------------------------------------------
--- 11. Table structure for table: reports
+-- 13. Table structure for table: volunteer_applications
 -- ------------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS reports (
-    id VARCHAR(64) PRIMARY KEY,
-    reporter_name VARCHAR(255),
-    reported_participant VARCHAR(255),
-    category VARCHAR(100),
-    description TEXT,
-    event_id VARCHAR(64),
-    status VARCHAR(50) DEFAULT 'New',
-    resolution_notes TEXT,
-    created_at VARCHAR(50)
-);
-
--- ------------------------------------------------------------------------------
--- 12. Table structure for table: volunteers
--- ------------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS volunteers (
+CREATE TABLE IF NOT EXISTS volunteer_applications (
     id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255),
-    phone VARCHAR(50),
     email VARCHAR(150),
+    phone VARCHAR(50),
+    area VARCHAR(255),
+    reason TEXT,
     experience TEXT,
-    preferred_games TEXT,
-    availability VARCHAR(255),
-    status VARCHAR(50) DEFAULT 'New',
+    skills TEXT,
+    availability TEXT,
+    preferred_responsibilities TEXT,
+    additional_info TEXT,
+    status VARCHAR(30) DEFAULT 'New',
     submitted_at VARCHAR(50)
 );
 
+CREATE INDEX IF NOT EXISTS idx_vol_status ON volunteer_applications (status);
+CREATE INDEX IF NOT EXISTS idx_vol_email ON volunteer_applications (email);
+CREATE INDEX IF NOT EXISTS idx_vol_submitted_at ON volunteer_applications (submitted_at);
+
 -- ------------------------------------------------------------------------------
--- 13. Table structure for table: audit_logs
+-- 14. Table structure for table: audit_logs
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS audit_logs (
     id VARCHAR(64) PRIMARY KEY,
@@ -273,7 +347,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs ("timestamp");
 
 -- ------------------------------------------------------------------------------
--- 14. Table structure for table: notifications
+-- 15. Table structure for table: notifications
 -- Dual delivery (Email + WhatsApp) with automatic Email fallback
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS notifications (
@@ -285,32 +359,99 @@ CREATE TABLE IF NOT EXISTS notifications (
     recipient_email VARCHAR(150),
     recipient_phone VARCHAR(50),
     event_id VARCHAR(64),
+    user_id VARCHAR(64),
+    registration_id VARCHAR(64),
     delivery_status VARCHAR(50) DEFAULT 'Sent',
     whatsapp_status VARCHAR(100),
+    email_html TEXT,
+    action_url TEXT,
     "timestamp" VARCHAR(50),
+    created_at VARCHAR(50),
     is_read BOOLEAN DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS idx_notifications_timestamp ON notifications ("timestamp");
 CREATE INDEX IF NOT EXISTS idx_notifications_event_id ON notifications (event_id);
+CREATE INDEX IF NOT EXISTS idx_notif_email_ts ON notifications (recipient_email, "timestamp");
+CREATE INDEX IF NOT EXISTS idx_notif_event_ts ON notifications (event_id, "timestamp");
+
+-- ------------------------------------------------------------------------------
+-- 16. Table structure for table: community_stats
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS community_stats (
+    id VARCHAR(64) PRIMARY KEY,
+    total_members INTEGER DEFAULT 0,
+    total_events INTEGER DEFAULT 0,
+    total_games INTEGER DEFAULT 0,
+    total_checkins INTEGER DEFAULT 0,
+    active_areas TEXT DEFAULT '[]',
+    payload_json TEXT,
+    updated_by VARCHAR(150),
+    updated_at VARCHAR(50)
+);
+
+-- ------------------------------------------------------------------------------
+-- 17. Table structure for table: google_users
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS google_users (
+    email VARCHAR(150) PRIMARY KEY,
+    google_id VARCHAR(150),
+    participant_id VARCHAR(64),
+    user_json TEXT NOT NULL,
+    registered_at VARCHAR(50) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_google_participant ON google_users (participant_id);
+
+-- ------------------------------------------------------------------------------
+-- 18. Table structure for table: otp_verifications
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS otp_verifications (
+    email VARCHAR(150) PRIMARY KEY,
+    otp VARCHAR(20) NOT NULL,
+    expires_at BIGINT NOT NULL,
+    created_at BIGINT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    verified BOOLEAN NOT NULL DEFAULT FALSE,
+    verified_at BIGINT,
+    name VARCHAR(255)
+);
+
+CREATE INDEX IF NOT EXISTS idx_otp_expires ON otp_verifications (expires_at);
+
+-- ------------------------------------------------------------------------------
+-- 19. Table structure for table: app_configs
+-- Stores persisted communications / SMTP / Razorpay configuration JSON
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS app_configs (
+    config_key VARCHAR(100) PRIMARY KEY,
+    config_json TEXT NOT NULL,
+    updated_at VARCHAR(50),
+    updated_by VARCHAR(150)
+);
+
+-- Additional high-speed lookup indexes on registrations
+CREATE INDEX IF NOT EXISTS idx_reg_email ON registrations (participant_email);
+CREATE INDEX IF NOT EXISTS idx_reg_event_status ON registrations (event_id, attendance_status);
 
 -- ==============================================================================
 -- INITIAL SEED DATA (FETCHED DIRECTLY FROM DATABASE TABLES ONLY)
 -- ==============================================================================
 
--- 1. Seed `admins`
-INSERT INTO admins (id, name, email, phone, password, role, designation, avatar, bio, active, created_at)
+-- 1. Seed `admins` (credentials managed with salted PBKDF2 hashes in backend/user_credentials)
+INSERT INTO admins (id, name, email, phone, password, role, designation, avatar, bio, area, active, created_at)
 VALUES
 (
     'u-admin-parimal',
     'Parimal Shete',
     'parimalmshete@gmail.com',
     '+91 92849 83072',
-    'admin123',
+    '',
     'admin',
     'Co-Founder & Community Architect',
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
     'Social Shuffle Co-Founder & Community Architect',
+    'Koregaon Park, Pune',
     TRUE,
     '2024-01-01T00:00:00Z'
 ),
@@ -319,11 +460,12 @@ VALUES
     'Diksha',
     'birladiksha01@gmail.com',
     '+91 92849 83072',
-    'admin123',
+    '',
     'admin',
     'Co-Founder & Experience Director',
     'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200',
     'Social Shuffle Co-Founder & Experience Director',
+    'Kalyani Nagar, Pune',
     TRUE,
     '2024-01-01T00:00:00Z'
 )
@@ -335,53 +477,10 @@ ON CONFLICT (id) DO UPDATE SET
     designation = EXCLUDED.designation,
     avatar = EXCLUDED.avatar,
     bio = EXCLUDED.bio,
+    area = EXCLUDED.area,
     active = EXCLUDED.active;
 
--- 2. Seed `users`
-INSERT INTO users (id, name, email, phone, password, role, area, avatar, bio, participant_id, auth_provider, last_active_at, login_at, created_at)
-VALUES
-(
-    'u-admin-parimal',
-    'Parimal Shete',
-    'parimalmshete@gmail.com',
-    '+91 92849 83072',
-    'admin123',
-    'admin',
-    'Koregaon Park',
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-    'Co-Founder & Community Architect at Social Shuffle',
-    NULL,
-    'google',
-    '2026-09-29T12:00:00Z',
-    '2026-09-29T12:00:00Z',
-    '2024-01-01T00:00:00Z'
-),
-(
-    'u-admin-diksha',
-    'Diksha',
-    'birladiksha01@gmail.com',
-    '+91 92849 83072',
-    'admin123',
-    'admin',
-    'Kalyani Nagar',
-    'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200',
-    'Co-Founder & Experience Director at Social Shuffle',
-    NULL,
-    'google',
-    '2026-09-29T12:00:00Z',
-    '2026-09-29T12:00:00Z',
-    '2024-01-01T00:00:00Z'
-)
-ON CONFLICT (id) DO UPDATE SET
-    name = EXCLUDED.name,
-    email = EXCLUDED.email,
-    phone = EXCLUDED.phone,
-    role = EXCLUDED.role,
-    area = EXCLUDED.area,
-    avatar = EXCLUDED.avatar,
-    bio = EXCLUDED.bio;
-
--- 3. `participants` (Clean initial state: populated as real users register)
+-- 2. `participants`, `users` & `user_credentials` (hashed credentials initialized by backend auth engine)
 
 -- 4. Seed `venues`
 INSERT INTO venues (id, name, address, area, capacity, contact_phone, maps_url, image, active)
@@ -759,22 +858,21 @@ ON CONFLICT (id) DO NOTHING;
 
 
 -- ------------------------------------------------------------------------------
--- Seed Participants Table with Real Pune Shuffler Profiles & Credentials
+-- Seed Participants Table with Real Pune Shuffler Profiles (credentials in user_credentials)
 -- ------------------------------------------------------------------------------
-INSERT INTO participants (id, name, email, phone, password, username, area, avatar, bio, joined_date, total_events_attended, total_registrations, games_played_ids, venues_visited, total_pax_brought, last_attended_event_id, last_attended_event_title) VALUES
-  ('p-varad', 'Varad', 'varad@socialshuffle.in', '+91 98221 12345', 'shuffler123', 'varad', 'Koregaon Park', 'https://api.dicebear.com/7.x/bottts/svg?seed=Varad', 'Pune board game enthusiast • Catan & Social Deduction lover!', '2026-11-11', 0, 0, '[]', '[]', 0, NULL, NULL),
-  ('p-mw97kkb5', 'Aman Sharma', 'aman.sharma@example.com', '9822099112', 'mysecretpass', 'aman.sharma', 'Baner', 'https://api.dicebear.com/7.x/bottts/svg?seed=Aman%20Sharma', 'Board game lover eager to play!', '2026-11-09', 0, 0, '[]', '[]', 0, NULL, NULL),
-  ('p-priya', 'Priya Nair', 'priya.nair@example.com', '+91 97632 99011', 'shuffler123', 'priya.nair', 'Wakad', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80', 'Weekly regular shuffler. Always looking for teammates for Just One & Wingspan!', '2024-01-15', 6, 7, '["g-codenames","g-justone","g-azul","g-wingspan","g-dixit","g-cascadia"]', '["Toit Brewery","FC Road Social","Waari Book Cafe"]', 3, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-rohan', 'Rohan Deshmukh', 'rohan.deshmukh@example.com', '+91 98223 44551', 'shuffler123', 'rohan.deshmukh', 'Koregaon Park', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80', 'Heavy strategy enthusiast. Terraforming Mars, Dune Imperium & Scythe fan.', '2024-01-05', 11, 12, '["g-dune","g-terraformingmars","g-scythe","g-brass","g-root"]', '["Toit Brewery","FC Road Social","Effingut KP","Waari Book Cafe"]', 8, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-ananya', 'Ananya Kulkarni', 'ananya.k@example.com', '+91 98901 22334', 'shuffler123', 'ananya.k', 'Baner', 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=160&q=80', 'Designer by day, social deduction master by night. Secret Hitler champ.', '2024-01-20', 8, 8, '["g-secrethitler","g-avalon","g-bloodontheclocktower","g-decrypto","g-wavelength"]', '["Toit Brewery","Waari Book Cafe"]', 5, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-tanmay', 'Tanmay Joshi', 'tanmay.j@example.com', '+91 98221 88990', 'shuffler123', 'tanmay.j', 'Viman Nagar', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=160&q=80', 'Love learning new modern European games and meeting new people over coffee.', '2024-02-01', 5, 6, '["g-catan","g-ticketoride","g-carcassonne","g-splendor","g-cascadia"]', '["FC Road Social","Toit Brewery"]', 2, 'ev-ss2', 'Strategy & Heavyweight Battles'),
-  ('p-sneha', 'Sneha Patil', 'sneha.patil@example.com', '+91 97665 11223', 'shuffler123', 'sneha.patil', 'Aundh', 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80', 'Board game collector and casual teacher. Let us play Cascadia and Sushi Go!', '2024-02-14', 4, 4, '["g-cascadia","g-sushigo","g-azul","g-flip7","g-dixit"]', '["Waari Book Cafe","FC Road Social"]', 1, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-aditya', 'Aditya Shinde', 'aditya.shinde@example.com', '+91 98220 33445', 'shuffler123', 'aditya.shinde', 'Kothrud', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80', 'Tournament competitor. Competitive Spirit Island and Blood on the Clocktower storyteller.', '2024-01-10', 9, 10, '["g-spiritisland","g-bloodontheclocktower","g-dune","g-root","g-clank"]', '["Toit Brewery","FC Road Social","Effingut KP"]', 6, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-meera-nov2', 'Meera Rao', 'meera.rao@example.com', '+91 98231 44001', 'shuffler123', 'meera.rao', 'Kalyani Nagar', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80', 'Casual strategist & coffee addict. Eager to master Cascadia & Ticket to Ride!', '2026-11-02', 1, 1, '["g-cascadia"]', '["FC Road Social"]', 1, 'ev-ss1', 'Strategy & Heavyweight Battles'),
-  ('p-kunal-nov4', 'Kunal Bapat', 'kunal.bapat@example.com', '+91 98902 11229', 'shuffler123', 'kunal.bapat', 'Baner', 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=160&q=80', 'Techie in Baner. Loved playing Codenames and Just One at the weekend meetup.', '2026-11-04', 1, 1, '["g-codenames","g-justone"]', '["Toit Brewery"]', 2, 'ev-ss2', 'Beginner Friendly Meetup'),
-  ('p-neha-nov6', 'Neha Mahajan', 'neha.m@example.com', '+91 97631 88772', 'shuffler123', 'neha.mahajan', 'Viman Nagar', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=160&q=80', 'Social deduction fanatic. First time shuffler and loved the community vibe!', '2026-11-06', 1, 1, '["g-secrethitler","g-avalon"]', '["Effingut KP"]', 0, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-vikram-nov7', 'Vikram Sen', 'vikram.sen@example.com', '+91 98224 55667', 'shuffler123', 'vikram.sen', 'Koregaon Park', 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=160&q=80', 'Heavy Euro games & tabletop architect. Excited for Dune & Scythe sessions.', '2026-11-07', 1, 2, '["g-dune","g-scythe"]', '["Toit Brewery"]', 1, 'ev-ss2', 'Strategy & Heavyweight Battles'),
-  ('p-pooja-nov8', 'Pooja Hegde', 'pooja.h@example.com', '+91 99220 33991', 'shuffler123', 'pooja.hegde', 'Wakad', 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=160&q=80', 'Solo explorer who joined the table and made 5 new friends! Sushi Go enthusiast.', '2026-11-08', 1, 1, '["g-sushigo","g-flip7"]', '["FC Road Social"]', 0, 'ev-ss1', 'Beginner Friendly Meetup'),
-  ('p-siddharth-nov10', 'Siddharth Verma', 'siddharth.v@example.com', '+91 98905 77114', 'shuffler123', 'siddharth.v', 'Baner', 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=160&q=80', 'Passionate gamer recently moved from Bengaluru. Ready for weekend shuffles!', '2026-11-10', 0, 1, '[]', '[]', 0, NULL, NULL)
+INSERT INTO participants (id, name, email, phone, username, area, avatar, bio, joined_date, total_events_attended, total_registrations, games_played_ids, venues_visited, total_pax_brought, last_attended_event_id, last_attended_event_title) VALUES
+  ('p-mw97kkb5', 'Aman Sharma', 'aman.sharma@example.com', '9822099112', 'aman.sharma', 'Baner', 'https://api.dicebear.com/7.x/bottts/svg?seed=Aman%20Sharma', 'Board game lover eager to play!', '2026-11-09', 0, 0, '[]', '[]', 0, NULL, NULL),
+  ('p-priya', 'Priya Nair', 'priya.nair@example.com', '+91 97632 99011', 'priya.nair', 'Wakad', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80', 'Weekly regular shuffler. Always looking for teammates for Just One & Wingspan!', '2024-01-15', 6, 7, '["g-codenames","g-justone","g-azul","g-wingspan","g-dixit","g-cascadia"]', '["Toit Brewery","FC Road Social","Waari Book Cafe"]', 3, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-rohan', 'Rohan Deshmukh', 'rohan.deshmukh@example.com', '+91 98223 44551', 'rohan.deshmukh', 'Koregaon Park', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80', 'Heavy strategy enthusiast. Terraforming Mars, Dune Imperium & Scythe fan.', '2024-01-05', 11, 12, '["g-dune","g-terraformingmars","g-scythe","g-brass","g-root"]', '["Toit Brewery","FC Road Social","Effingut KP","Waari Book Cafe"]', 8, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-ananya', 'Ananya Kulkarni', 'ananya.k@example.com', '+91 98901 22334', 'ananya.k', 'Baner', 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=160&q=80', 'Designer by day, social deduction master by night. Secret Hitler champ.', '2024-01-20', 8, 8, '["g-secrethitler","g-avalon","g-bloodontheclocktower","g-decrypto","g-wavelength"]', '["Toit Brewery","Waari Book Cafe"]', 5, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-tanmay', 'Tanmay Joshi', 'tanmay.j@example.com', '+91 98221 88990', 'tanmay.j', 'Viman Nagar', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=160&q=80', 'Love learning new modern European games and meeting new people over coffee.', '2024-02-01', 5, 6, '["g-catan","g-ticketoride","g-carcassonne","g-splendor","g-cascadia"]', '["FC Road Social","Toit Brewery"]', 2, 'ev-ss2', 'Strategy & Heavyweight Battles'),
+  ('p-sneha', 'Sneha Patil', 'sneha.patil@example.com', '+91 97665 11223', 'sneha.patil', 'Aundh', 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80', 'Board game collector and casual teacher. Let us play Cascadia and Sushi Go!', '2024-02-14', 4, 4, '["g-cascadia","g-sushigo","g-azul","g-flip7","g-dixit"]', '["Waari Book Cafe","FC Road Social"]', 1, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-aditya', 'Aditya Shinde', 'aditya.shinde@example.com', '+91 98220 33445', 'aditya.shinde', 'Kothrud', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80', 'Tournament competitor. Competitive Spirit Island and Blood on the Clocktower storyteller.', '2024-01-10', 9, 10, '["g-spiritisland","g-bloodontheclocktower","g-dune","g-root","g-clank"]', '["Toit Brewery","FC Road Social","Effingut KP"]', 6, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-meera-nov2', 'Meera Rao', 'meera.rao@example.com', '+91 98231 44001', 'meera.rao', 'Kalyani Nagar', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80', 'Casual strategist & coffee addict. Eager to master Cascadia & Ticket to Ride!', '2026-11-02', 1, 1, '["g-cascadia"]', '["FC Road Social"]', 1, 'ev-ss1', 'Strategy & Heavyweight Battles'),
+  ('p-kunal-nov4', 'Kunal Bapat', 'kunal.bapat@example.com', '+91 98902 11229', 'kunal.bapat', 'Baner', 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=160&q=80', 'Techie in Baner. Loved playing Codenames and Just One at the weekend meetup.', '2026-11-04', 1, 1, '["g-codenames","g-justone"]', '["Toit Brewery"]', 2, 'ev-ss2', 'Beginner Friendly Meetup'),
+  ('p-neha-nov6', 'Neha Mahajan', 'neha.m@example.com', '+91 97631 88772', 'neha.mahajan', 'Viman Nagar', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=160&q=80', 'Social deduction fanatic. First time shuffler and loved the community vibe!', '2026-11-06', 1, 1, '["g-secrethitler","g-avalon"]', '["Effingut KP"]', 0, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-vikram-nov7', 'Vikram Sen', 'vikram.sen@example.com', '+91 98224 55667', 'vikram.sen', 'Koregaon Park', 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=160&q=80', 'Heavy Euro games & tabletop architect. Excited for Dune & Scythe sessions.', '2026-11-07', 1, 2, '["g-dune","g-scythe"]', '["Toit Brewery"]', 1, 'ev-ss2', 'Strategy & Heavyweight Battles'),
+  ('p-pooja-nov8', 'Pooja Hegde', 'pooja.h@example.com', '+91 99220 33991', 'pooja.hegde', 'Wakad', 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=160&q=80', 'Solo explorer who joined the table and made 5 new friends! Sushi Go enthusiast.', '2026-11-08', 1, 1, '["g-sushigo","g-flip7"]', '["FC Road Social"]', 0, 'ev-ss1', 'Beginner Friendly Meetup'),
+  ('p-siddharth-nov10', 'Siddharth Verma', 'siddharth.v@example.com', '+91 98905 77114', 'siddharth.v', 'Baner', 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=160&q=80', 'Passionate gamer recently moved from Bengaluru. Ready for weekend shuffles!', '2026-11-10', 0, 1, '[]', '[]', 0, NULL, NULL)
 ON CONFLICT (id) DO NOTHING;
 

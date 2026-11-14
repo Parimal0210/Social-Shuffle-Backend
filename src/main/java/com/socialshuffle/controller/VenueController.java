@@ -2,10 +2,13 @@ package com.socialshuffle.controller;
 
 import com.socialshuffle.model.Venue;
 import com.socialshuffle.repository.VenueRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -20,6 +23,7 @@ public class VenueController {
     }
 
     @GetMapping
+    @Cacheable(value = "venues", key = "T(java.lang.Boolean).TRUE.equals(#activeOnly) ? 'active' : 'all'")
     public List<Venue> getAllVenues(@RequestParam(required = false) Boolean activeOnly) {
         if (Boolean.TRUE.equals(activeOnly)) {
             return venueRepository.findByActiveTrue();
@@ -35,6 +39,7 @@ public class VenueController {
     }
 
     @PostMapping
+    @CacheEvict(value = "venues", allEntries = true)
     public Venue createVenue(@RequestBody Venue venue) {
         if (venue.getId() == null || venue.getId().trim().isEmpty()) {
             venue.setId("ven-" + UUID.randomUUID().toString().substring(0, 8));
@@ -43,6 +48,7 @@ public class VenueController {
     }
 
     @PutMapping("/{id}")
+    @CacheEvict(value = "venues", allEntries = true)
     public ResponseEntity<Venue> updateVenue(@PathVariable String id, @RequestBody Venue updates) {
         return venueRepository.findById(id).map(existing -> {
             if (updates.getName() != null) existing.setName(updates.getName());
@@ -56,5 +62,15 @@ public class VenueController {
             Venue saved = venueRepository.save(existing);
             return ResponseEntity.ok(saved);
         }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/{id}")
+    @CacheEvict(value = "venues", allEntries = true)
+    public ResponseEntity<?> deleteVenue(@PathVariable String id) {
+        if (venueRepository.existsById(id)) {
+            venueRepository.deleteById(id);
+            return ResponseEntity.ok(Map.of("success", true, "id", id));
+        }
+        return ResponseEntity.notFound().build();
     }
 }

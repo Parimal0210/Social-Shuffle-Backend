@@ -66,6 +66,21 @@ public class ShuffleEvent implements Serializable {
     @Column(name = "cover_image", columnDefinition = "TEXT")
     private String coverImage;
 
+    @Column(name = "map_location", columnDefinition = "TEXT")
+    private String mapLocation;
+
+    @Column(name = "registered_count")
+    private int registeredCount = 0;
+
+    @Column(name = "checked_in_count")
+    private int checkedInCount = 0;
+
+    @Column(name = "created_at", length = 50)
+    private String createdAt;
+
+    @Column(name = "updated_at", length = 50)
+    private String updatedAt;
+
     public ShuffleEvent() {
     }
 
@@ -195,6 +210,46 @@ public class ShuffleEvent implements Serializable {
 
     public void setCoverImage(String coverImage) {
         this.coverImage = coverImage;
+    }
+
+    public String getMapLocation() {
+        return mapLocation;
+    }
+
+    public void setMapLocation(String mapLocation) {
+        this.mapLocation = mapLocation;
+    }
+
+    public int getRegisteredCount() {
+        return registeredCount;
+    }
+
+    public void setRegisteredCount(int registeredCount) {
+        this.registeredCount = registeredCount;
+    }
+
+    public int getCheckedInCount() {
+        return checkedInCount;
+    }
+
+    public void setCheckedInCount(int checkedInCount) {
+        this.checkedInCount = checkedInCount;
+    }
+
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(String createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(String updatedAt) {
+        this.updatedAt = updatedAt;
     }
 
     @Override

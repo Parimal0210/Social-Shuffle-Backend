@@ -1,5 +1,6 @@
 package com.socialshuffle.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.socialshuffle.converter.StringListConverter;
 import jakarta.persistence.*;
 import java.io.Serializable;
@@ -39,6 +40,7 @@ public class Game implements Serializable {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    @JsonAlias({"isActive", "active"})
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
@@ -60,6 +62,18 @@ public class Game implements Serializable {
 
     @Column(name = "venue")
     private String venue;
+
+    @Column(name = "available")
+    private boolean available = true;
+
+    @Column(name = "current_location")
+    private String currentLocation;
+
+    @Column(name = "created_at", length = 50)
+    private String createdAt;
+
+    @Column(name = "updated_at", length = 50)
+    private String updatedAt;
 
     public Game() {
     }
@@ -214,6 +228,38 @@ public class Game implements Serializable {
 
     public void setVenue(String venue) {
         this.venue = venue;
+    }
+
+    public boolean isAvailable() {
+        return available;
+    }
+
+    public void setAvailable(boolean available) {
+        this.available = available;
+    }
+
+    public String getCurrentLocation() {
+        return currentLocation;
+    }
+
+    public void setCurrentLocation(String currentLocation) {
+        this.currentLocation = currentLocation;
+    }
+
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(String createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(String updatedAt) {
+        this.updatedAt = updatedAt;
     }
 
     @Override

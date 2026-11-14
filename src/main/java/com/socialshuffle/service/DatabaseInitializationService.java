@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Ensures all required domain tables and initial seed data exist in the database.
- * Strictly guarantees that all application queries fetch persisted data from the database.
+ * Single fast startup verifier ensuring admins, user_credentials, badge_levels,
+ * community_stats, and starter catalog rows exist in the unified PostgreSQL schema.
  */
 @Component
 public class DatabaseInitializationService implements CommandLineRunner {
@@ -25,38 +25,35 @@ public class DatabaseInitializationService implements CommandLineRunner {
 
     private final AdminRepository adminRepository;
     private final UserRepository userRepository;
-    private final ParticipantRepository participantRepository;
+    private final UserCredentialRepository credentialRepository;
+    private final VenueRepository venueRepository;
     private final ShuffleEventRepository eventRepository;
     private final GameRepository gameRepository;
     private final BadgeLevelRepository badgeLevelRepository;
-    private final VenueRepository venueRepository;
-    private final RegistrationRepository registrationRepository;
-    private final EventFeedbackRepository feedbackRepository;
+    private final CommunityStatsRepository communityStatsRepository;
     private final AuditLogRepository auditLogRepository;
     private final NotificationItemRepository notificationRepository;
     private final PasswordSecurityUtil passwordSecurityUtil;
 
     public DatabaseInitializationService(AdminRepository adminRepository,
                                          UserRepository userRepository,
-                                         ParticipantRepository participantRepository,
+                                         UserCredentialRepository credentialRepository,
+                                         VenueRepository venueRepository,
                                          ShuffleEventRepository eventRepository,
                                          GameRepository gameRepository,
                                          BadgeLevelRepository badgeLevelRepository,
-                                         VenueRepository venueRepository,
-                                         RegistrationRepository registrationRepository,
-                                         EventFeedbackRepository feedbackRepository,
+                                         CommunityStatsRepository communityStatsRepository,
                                          AuditLogRepository auditLogRepository,
                                          NotificationItemRepository notificationRepository,
                                          PasswordSecurityUtil passwordSecurityUtil) {
         this.adminRepository = adminRepository;
         this.userRepository = userRepository;
-        this.participantRepository = participantRepository;
+        this.credentialRepository = credentialRepository;
+        this.venueRepository = venueRepository;
         this.eventRepository = eventRepository;
         this.gameRepository = gameRepository;
         this.badgeLevelRepository = badgeLevelRepository;
-        this.venueRepository = venueRepository;
-        this.registrationRepository = registrationRepository;
-        this.feedbackRepository = feedbackRepository;
+        this.communityStatsRepository = communityStatsRepository;
         this.auditLogRepository = auditLogRepository;
         this.notificationRepository = notificationRepository;
         this.passwordSecurityUtil = passwordSecurityUtil;
@@ -65,149 +62,107 @@ public class DatabaseInitializationService implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        log.info("Starting Social Shuffle Database verification and seeding check...");
-
-        seedAdminsIfEmpty();
-        seedUsersIfEmpty();
-        seedParticipantsIfEmpty();
+        log.info("Verifying unified Social Shuffle PostgreSQL schema & core data...");
+        ensureAdminsSynced();
         seedVenuesIfEmpty();
         seedEventsIfEmpty();
         seedGamesIfEmpty();
         seedBadgeLevelsIfEmpty();
-        seedRegistrationsIfEmpty();
-        seedFeedbackIfEmpty();
+        seedCommunityStatsIfEmpty();
         seedAuditAndNotificationsIfEmpty();
-
-        log.info("Database verification completed successfully. All data is persisted in database tables.");
+        log.info("Unified PostgreSQL verification completed cleanly.");
     }
 
-    private void seedAdminsIfEmpty() {
-        log.info("Verifying admins table in database...");
-        for (String legacyId : Arrays.asList("u-admin", "u-admin-aman", "u-admin-parimal-work")) {
-            adminRepository.findById(legacyId).ifPresent(adminRepository::delete);
-        }
-        adminRepository.findByEmailIgnoreCase("admin@socialshuffle.com").ifPresent(adminRepository::delete);
-        adminRepository.findByEmailIgnoreCase("diksha@socialshuffle.in").ifPresent(adminRepository::delete);
-        adminRepository.findByEmailIgnoreCase("parimal.work@gmail.com").ifPresent(adminRepository::delete);
-        adminRepository.flush();
-
-        AdminAccount parimal = resolveAdminRecord("u-admin-parimal", "parimalmshete@gmail.com");
-        parimal.setName("Parimal Shete");
-        parimal.setEmail("parimalmshete@gmail.com");
-        parimal.setPhone("+91 92849 83072");
-        if (parimal.getPassword() == null || parimal.getPassword().isEmpty() || !parimal.getPassword().startsWith("pbkdf2:")) {
-            parimal.setPassword(passwordSecurityUtil.hashPassword("admin123"));
-        }
-        parimal.setRole("admin");
-        parimal.setDesignation("Co-Founder & Community Architect");
-        parimal.setAvatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
-        parimal.setBio("Social Shuffle Co-Founder & Community Architect");
-        parimal.setActive(true);
-        if (parimal.getCreatedAt() == null) {
-            parimal.setCreatedAt("2024-01-01T00:00:00Z");
-        }
-
-        AdminAccount diksha = resolveAdminRecord("u-admin-diksha", "birladiksha01@gmail.com");
-        diksha.setName("Diksha");
-        diksha.setEmail("birladiksha01@gmail.com");
-        diksha.setPhone("+91 92849 83072");
-        if (diksha.getPassword() == null || diksha.getPassword().isEmpty() || !diksha.getPassword().startsWith("pbkdf2:")) {
-            diksha.setPassword(passwordSecurityUtil.hashPassword("admin123"));
-        }
-        diksha.setRole("admin");
-        diksha.setDesignation("Co-Founder & Experience Director");
-        diksha.setAvatar("https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200");
-        diksha.setBio("Social Shuffle Co-Founder & Experience Director");
-        diksha.setActive(true);
-        if (diksha.getCreatedAt() == null) {
-            diksha.setCreatedAt("2024-01-01T00:00:00Z");
-        }
-
-        adminRepository.saveAll(Arrays.asList(parimal, diksha));
+    private void ensureAdminsSynced() {
+        String nowIso = Instant.now().toString();
+        ensureAdminAccount(
+                "u-admin-parimal",
+                "Parimal Shete",
+                "parimalmshete@gmail.com",
+                "+91 92849 83072",
+                "Co-Founder & Community Architect",
+                "Koregaon Park, Pune",
+                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200",
+                "Social Shuffle Co-Founder & Community Architect",
+                nowIso
+        );
+        ensureAdminAccount(
+                "u-admin-diksha",
+                "Diksha",
+                "birladiksha01@gmail.com",
+                "+91 92849 83072",
+                "Co-Founder & Experience Director",
+                "Kalyani Nagar, Pune",
+                "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200",
+                "Social Shuffle Co-Founder & Experience Director",
+                nowIso
+        );
     }
 
-    private AdminAccount resolveAdminRecord(String canonicalId, String email) {
-        Optional<AdminAccount> byId = adminRepository.findById(canonicalId);
-        if (byId.isPresent()) {
-            return byId.get();
-        }
-        Optional<AdminAccount> byEmail = adminRepository.findByEmailIgnoreCase(email);
-        if (byEmail.isPresent()) {
-            AdminAccount stale = byEmail.get();
-            String existingPwd = stale.getPassword();
-            String createdAt = stale.getCreatedAt();
-            adminRepository.delete(stale);
-            adminRepository.flush();
-            AdminAccount fresh = new AdminAccount(canonicalId, "", email, "+91 92849 83072", existingPwd != null ? existingPwd : "");
-            fresh.setCreatedAt(createdAt);
-            return fresh;
-        }
-        return new AdminAccount(canonicalId, "", email, "+91 92849 83072", "");
-    }
+    private void ensureAdminAccount(String canonicalId, String name, String email, String phone,
+                                    String designation, String area, String avatar, String bio, String nowIso) {
+        Optional<AdminAccount> existingOpt = adminRepository.findById(canonicalId)
+                .or(() -> adminRepository.findByEmailIgnoreCase(email));
 
-    private void seedUsersIfEmpty() {
-        log.info("Verifying admin accounts in users table...");
-        for (String legacyId : Arrays.asList("u-admin", "u-admin-aman", "u-admin-parimal-work")) {
-            userRepository.findById(legacyId).ifPresent(userRepository::delete);
+        AdminAccount admin = existingOpt.orElseGet(() -> new AdminAccount(canonicalId, name, email, phone, ""));
+        if (admin.getId() == null || admin.getId().isEmpty()) {
+            admin.setId(canonicalId);
         }
-        userRepository.findByEmailIgnoreCase("admin@socialshuffle.com").ifPresent(userRepository::delete);
-        userRepository.findByEmailIgnoreCase("diksha@socialshuffle.in").ifPresent(userRepository::delete);
-        userRepository.findByEmailIgnoreCase("parimal.work@gmail.com").ifPresent(userRepository::delete);
-        userRepository.flush();
-
-        User parimalUser = resolveUserRecord("u-admin-parimal", "parimalmshete@gmail.com", "Koregaon Park");
-        parimalUser.setName("Parimal Shete");
-        parimalUser.setEmail("parimalmshete@gmail.com");
-        parimalUser.setPhone("+91 92849 83072");
-        if (parimalUser.getPassword() == null || parimalUser.getPassword().isEmpty() || !parimalUser.getPassword().startsWith("pbkdf2:")) {
-            parimalUser.setPassword(passwordSecurityUtil.hashPassword("admin123"));
+        String pwdHash = admin.getPassword();
+        if (!passwordSecurityUtil.isHashed(pwdHash)) {
+            Optional<UserCredential> credOpt = credentialRepository.findByEmailIgnoreCase(email);
+            if (credOpt.isPresent() && passwordSecurityUtil.isHashed(credOpt.get().getPasswordHash())) {
+                pwdHash = credOpt.get().getPasswordHash();
+            } else {
+                pwdHash = passwordSecurityUtil.hashPassword("admin123");
+            }
         }
-        parimalUser.setRole("admin");
-        parimalUser.setArea("Koregaon Park");
-        parimalUser.setAvatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
-        parimalUser.setBio("Co-Founder & Community Architect at Social Shuffle");
-        parimalUser.setAuthProvider("google");
+        admin.setName(name);
+        admin.setEmail(email);
+        admin.setPhone(phone);
+        admin.setPassword(pwdHash);
+        admin.setRole("admin");
+        admin.setDesignation(designation);
+        admin.setArea(area);
+        admin.setAvatar(avatar);
+        admin.setBio(bio);
+        admin.setActive(true);
+        if (admin.getCreatedAt() == null) admin.setCreatedAt("2024-01-01T00:00:00Z");
+        adminRepository.save(admin);
 
-        User dikshaUser = resolveUserRecord("u-admin-diksha", "birladiksha01@gmail.com", "Kalyani Nagar");
-        dikshaUser.setName("Diksha");
-        dikshaUser.setEmail("birladiksha01@gmail.com");
-        dikshaUser.setPhone("+91 92849 83072");
-        if (dikshaUser.getPassword() == null || dikshaUser.getPassword().isEmpty() || !dikshaUser.getPassword().startsWith("pbkdf2:")) {
-            dikshaUser.setPassword(passwordSecurityUtil.hashPassword("admin123"));
+        // Keep users table synced
+        User user = userRepository.findByEmailIgnoreCase(email)
+                .orElseGet(() -> new User(admin.getId(), name, email, phone, pwdHash, "admin", area));
+        user.setName(name);
+        user.setPhone(phone);
+        user.setPassword(pwdHash);
+        user.setRole("admin");
+        user.setArea(area);
+        user.setAvatar(avatar);
+        user.setBio(bio);
+        user.setAuthProvider("google");
+        userRepository.save(user);
+
+        // Keep user_credentials table synced
+        if (!credentialRepository.existsByEmailIgnoreCase(email)) {
+            UserCredential cred = new UserCredential();
+            cred.setUserId("cred-" + admin.getId());
+            cred.setSubjectType("admin");
+            cred.setSubjectId(admin.getId());
+            cred.setEmail(email);
+            cred.setPhone(phone);
+            cred.setUsername(email.split("@")[0]);
+            cred.setPasswordHash(pwdHash);
+            cred.setAuthProvider("local");
+            cred.setFailedAttempts(0);
+            cred.setCreatedAt(nowIso);
+            cred.setUpdatedAt(nowIso);
+            credentialRepository.save(cred);
         }
-        dikshaUser.setRole("admin");
-        dikshaUser.setArea("Kalyani Nagar");
-        dikshaUser.setAvatar("https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200");
-        dikshaUser.setBio("Co-Founder & Experience Director at Social Shuffle");
-        dikshaUser.setAuthProvider("google");
-
-        userRepository.saveAll(Arrays.asList(parimalUser, dikshaUser));
-    }
-
-    private User resolveUserRecord(String canonicalId, String email, String area) {
-        Optional<User> byId = userRepository.findById(canonicalId);
-        if (byId.isPresent()) {
-            return byId.get();
-        }
-        Optional<User> byEmail = userRepository.findByEmailIgnoreCase(email);
-        if (byEmail.isPresent()) {
-            User stale = byEmail.get();
-            String existingPwd = stale.getPassword();
-            userRepository.delete(stale);
-            userRepository.flush();
-            return new User(canonicalId, "", email, "+91 92849 83072", existingPwd != null ? existingPwd : "", "admin", area);
-        }
-        return new User(canonicalId, "", email, "+91 92849 83072", "", "admin", area);
-    }
-
-    private void seedParticipantsIfEmpty() {
-        // Clean initial state: Active participant records are generated through live user registration
-        log.info("Participants table ready for real member registrations.");
     }
 
     private void seedVenuesIfEmpty() {
         if (venueRepository.count() == 0) {
-            log.info("Seeding venues table in database...");
             Venue v1 = new Venue("ven-1", "The Rustle Nest Cafe", "Lane 6, Koregaon Park, Pune, Maharashtra 411001", "Koregaon Park", 45, "+91 92849 83072", "https://maps.google.com/?q=The+Rustle+Nest+Cafe+Pune", "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=800", true);
             Venue v2 = new Venue("ven-2", "Pagdandi Bookstore Cafe", "Shop 6, Regent Plaza, Baner - Pashan Link Rd, Pune 411045", "Baner", 35, "+91 98220 44556", "https://maps.google.com/?q=Pagdandi+Bookstore+Cafe+Baner", "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&q=80&w=800", true);
             Venue v3 = new Venue("ven-3", "Waari Book Cafe", "Ground Floor, Choice Institute, Kothrud, Pune 411038", "Kothrud", 50, "+91 98220 77889", "https://maps.google.com/?q=Waari+Book+Cafe+Kothrud", "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&q=80&w=800", true);
@@ -217,7 +172,6 @@ public class DatabaseInitializationService implements CommandLineRunner {
 
     private void seedEventsIfEmpty() {
         if (eventRepository.count() == 0) {
-            log.info("Seeding events table in database...");
             ShuffleEvent e1 = new ShuffleEvent();
             e1.setId("evt-35");
             e1.setNumber(35);
@@ -230,8 +184,8 @@ public class DatabaseInitializationService implements CommandLineRunner {
             e1.setCategory("Casual & Social");
             e1.setCapacity(30);
             e1.setTicketPrice(350.0);
-            e1.setDescription("Join us for our signature weekend board gaming mixer! Over 40+ curated board games, warm coffee, and friendly table hosts to teach you the rules in under 5 minutes.");
-            e1.setNotes("Wear comfortable clothing. Welcome tea/coffee included with your registration ticket.");
+            e1.setDescription("Join us for our signature weekend board gaming mixer! Over 40+ curated board games, warm coffee, and friendly table hosts.");
+            e1.setNotes("Wear comfortable clothing. Welcome tea/coffee included.");
             e1.setPlannedGames(Arrays.asList("g-catan", "g-avalon", "g-codenames", "g-splendor"));
             e1.setStatus("upcoming");
             e1.setCoverImage("https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?auto=format&fit=crop&q=80&w=800");
@@ -260,129 +214,69 @@ public class DatabaseInitializationService implements CommandLineRunner {
 
     private void seedGamesIfEmpty() {
         if (gameRepository.count() == 0) {
-            log.info("Seeding games table in database...");
             Game g1 = new Game("g-catan", "Catan (Settlers of Catan)", "Strategy", "Medium", "3-4 Players", "60-90 mins",
                     "Collect resources, trade with fellow shufflers, build settlements and roads on the island of Catan.",
                     true, 48, Arrays.asList("trading", "negotiation", "dice", "classic"), 4.8,
                     "https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?auto=format&fit=crop&q=80&w=400",
                     "Community Library", "The Rustle Nest Cafe");
-
             Game g2 = new Game("g-avalon", "The Resistance: Avalon", "Social Deduction", "Beginner", "5-10 Players", "30-45 mins",
                     "Loyal servants of Arthur vs Minions of Mordred. Pure deception, table talk, and dramatic accusations.",
                     true, 62, Arrays.asList("bluffing", "party", "hidden-role"), 4.9,
                     "https://images.unsplash.com/photo-1543083477-4f785aeafaa9?auto=format&fit=crop&q=80&w=400",
                     "Community Library", "The Rustle Nest Cafe");
-
             Game g3 = new Game("g-codenames", "Codenames", "Party", "Beginner", "4-8 Players", "15-20 mins",
                     "Two rival spymasters know the secret identities of 25 agents. Teammates try to guess words based on one-word clues.",
                     true, 89, Arrays.asList("word", "deduction", "icebreaker"), 4.8,
                     "https://images.unsplash.com/photo-1563941402622-4e7a488bcc57?auto=format&fit=crop&q=80&w=400",
                     "Community Library", "Pagdandi Bookstore Cafe");
-
             Game g4 = new Game("g-splendor", "Splendor", "Strategy", "Beginner", "2-4 Players", "30 mins",
                     "Renaissance merchants acquiring gemstone mines, transportation, and shops to attract aristocratic patrons.",
                     true, 35, Arrays.asList("engine-building", "chips", "cards"), 4.7,
                     "https://images.unsplash.com/photo-1585504198199-20277593b94f?auto=format&fit=crop&q=80&w=400",
                     "Community Library", "Pagdandi Bookstore Cafe");
-
             gameRepository.saveAll(Arrays.asList(g1, g2, g3, g4));
         }
     }
 
     private void seedBadgeLevelsIfEmpty() {
         if (badgeLevelRepository.count() == 0) {
-            log.info("Seeding badge_levels table in database...");
             List<BadgeLevel> seeds = Arrays.asList(
-                    new BadgeLevel(1, "Novice Roller", "Initiate of the Ivory Dice", "The First Move",
-                            "Broke the ice, rolled the initial dice, and attended their first Pune tabletop gathering.",
-                            "🎲", 4, 1, "Common", "from-slate-800 via-purple-950/40 to-slate-900",
-                            "border-slate-600/50", "text-slate-300", "bg-slate-700/50 text-slate-300 border-slate-600",
-                            "shadow-slate-500/10", Arrays.asList("Unlock Digital Shuffler Passport", "Table Rookie Profile Badge")),
-
-                    new BadgeLevel(2, "Apprentice Shuffler", "Acolyte of the Meeple Order", "Table Apprentice",
-                            "Expanded beyond the basics with multiple games tested and a verified event check-in.",
-                            "♟️", 10, 1, "Common", "from-amber-950/30 via-slate-900 to-purple-950/30",
-                            "border-amber-700/50", "text-amber-300", "bg-amber-900/30 text-amber-300 border-amber-700/50",
-                            "shadow-amber-700/15", Arrays.asList("Game Table Tagging Rights", "Access to Sunday Game Discussions")),
-
-                    new BadgeLevel(3, "Casual Tactician", "Bronze Vanguard of Koregaon", "Cafe Contender",
-                            "Frequents Pune board game cafes and demonstrates reliable tabletop instincts.",
-                            "⚔️", 20, 2, "Uncommon", "from-amber-800/30 via-slate-900 to-amber-950/40",
-                            "border-amber-600/60", "text-amber-200", "bg-amber-600/20 text-amber-200 border-amber-500/40",
-                            "shadow-amber-500/20", Arrays.asList("Early Seat Reservations", "Bronze Shuffler Tier Status")),
-
-                    new BadgeLevel(4, "Board Game Enthusiast", "Master of the Card & Tile", "Strategy Adept",
-                            "Explores nearly a third of the catalog with a strong grasp of tile placement and card play.",
-                            "🏰", 30, 2, "Uncommon", "from-blue-950/40 via-slate-900 to-indigo-950/40",
-                            "border-blue-500/60", "text-blue-300", "bg-blue-500/20 text-blue-300 border-blue-400/40",
-                            "shadow-blue-500/25", Arrays.asList("Custom Table Name Tag", "Host Co-Player Recommendation")),
-
-                    new BadgeLevel(5, "Tabletop Strategist", "Silver Viceroy of Baner Tables", "Tabletop Champion",
-                            "Comfortably maneuvers euro-style resource management, engine building, and deduction games.",
-                            "🛡️", 40, 3, "Rare", "from-slate-700/40 via-indigo-950/50 to-slate-900",
-                            "border-slate-300/60", "text-slate-100", "bg-slate-200/20 text-slate-100 border-slate-300/50",
-                            "shadow-slate-300/25", Arrays.asList("Silver Shuffler Tier Status", "Tournament Seeding Priority")),
-
-                    new BadgeLevel(6, "Seasoned Shuffler", "Commander of a Thousand Battles", "Halfway to Catalog Mastery (50%+)",
-                            "Conquered half the official game library and a loyal regular at weekend gatherings.",
-                            "🌟", 50, 4, "Rare", "from-cyan-950/50 via-teal-950/40 to-slate-900",
-                            "border-cyan-400/70", "text-cyan-200", "bg-cyan-500/20 text-cyan-200 border-cyan-400/50",
-                            "shadow-cyan-400/30", Arrays.asList("New Game Library Voting Voice", "Exclusive Shuffler Community Role")),
-
-                    new BadgeLevel(7, "Master of Meeples", "Gold Sovereign of Strategy", "High Tactician (60%+)",
-                            "Commanding table presence with extensive knowledge across strategic and party classics.",
-                            "👑", 60, 5, "Epic", "from-amber-600/30 via-yellow-600/20 to-purple-950/50",
-                            "border-amber-400/80", "text-amber-200", "bg-amber-400/20 text-amber-200 border-amber-400/50",
-                            "shadow-amber-400/35", Arrays.asList("Gold Strategist Tier Status", "Complimentary Table Host Drink")),
-
-                    new BadgeLevel(8, "Grandmaster Tactician", "Platinum Grand Marshal", "Tabletop Virtuoso (70%+)",
-                            "Demonstrates surgical precision in deep euro-games, complex negotiations, and heavy card systems.",
-                            "💎", 70, 6, "Epic", "from-indigo-600/30 via-purple-600/20 to-sky-950/50",
-                            "border-indigo-400/80", "text-indigo-200", "bg-indigo-400/20 text-indigo-200 border-indigo-400/50",
-                            "shadow-indigo-400/40", Arrays.asList("VIP Game Day Lounge Pass", "Rule Explainer Recognition")),
-
-                    new BadgeLevel(9, "Tabletop Sovereign", "Diamond Regent of Tabletop Realms", "Pune Board Game Legend (80%+)",
-                            "A legendary pillar of Pune gaming who has conquered 80%+ of all curated board games.",
-                            "🌌", 80, 7, "Legendary", "from-purple-600/40 via-pink-600/30 to-amber-900/40",
-                            "border-purple-300", "text-purple-100", "bg-purple-500/30 text-purple-100 border-purple-300/60",
-                            "shadow-purple-400/50", Arrays.asList("Diamond Grandmaster Tier Status", "Permanent Hall of Fame Listing", "Private Table Reservation")),
-
-                    new BadgeLevel(10, "Apex Shuffler", "Mythic Tabletop Archon", "90%+ Catalog Mastery & Elite Veteran",
-                            "Supreme mastery of 90%+ games in Pune meetups. An immortal legend of Social Shuffle.",
-                            "⚡", 90, 8, "Mythic", "from-amber-400/40 via-purple-600/40 to-cyan-400/40",
-                            "border-amber-300", "text-amber-100", "bg-gradient-to-r from-amber-400/30 to-purple-400/30 text-amber-200 border-amber-300/70",
-                            "shadow-amber-400/60", Arrays.asList(
-                                    "Mythic Golden Avatar Crown",
-                                    "Free VIP Entry to Annual Championship",
-                                    "Name Etched onto Social Shuffle Trophy",
-                                    "Lifetime Pune Shuffler Pioneer Status"
-                            ))
+                    new BadgeLevel(1, "Novice Roller", "Initiate of the Ivory Dice", "The First Move", "Broke the ice, rolled the initial dice, and attended their first Pune tabletop gathering.", "🎲", 4, 1, "Common", "from-slate-800 via-purple-950/40 to-slate-900", "border-slate-600/50", "text-slate-300", "bg-slate-700/50 text-slate-300 border-slate-600", "shadow-slate-500/10", Arrays.asList("Unlock Digital Shuffler Passport", "Table Rookie Profile Badge")),
+                    new BadgeLevel(2, "Apprentice Shuffler", "Acolyte of the Meeple Order", "Table Apprentice", "Expanded beyond the basics with multiple games tested and a verified event check-in.", "♟️", 10, 1, "Common", "from-amber-950/30 via-slate-900 to-purple-950/30", "border-amber-700/50", "text-amber-300", "bg-amber-900/30 text-amber-300 border-amber-700/50", "shadow-amber-700/15", Arrays.asList("Game Table Tagging Rights", "Access to Sunday Game Discussions")),
+                    new BadgeLevel(3, "Casual Tactician", "Bronze Vanguard of Koregaon", "Cafe Contender", "Frequents Pune board game cafes and demonstrates reliable tabletop instincts.", "⚔️", 20, 2, "Uncommon", "from-amber-800/30 via-slate-900 to-amber-950/40", "border-amber-600/60", "text-amber-200", "bg-amber-600/20 text-amber-200 border-amber-500/40", "shadow-amber-500/20", Arrays.asList("Early Seat Reservations", "Bronze Shuffler Tier Status")),
+                    new BadgeLevel(4, "Board Game Enthusiast", "Master of the Card & Tile", "Strategy Adept", "Explores nearly a third of the catalog with a strong grasp of tile placement and card play.", "🏰", 30, 2, "Uncommon", "from-blue-950/40 via-slate-900 to-indigo-950/40", "border-blue-500/60", "text-blue-300", "bg-blue-500/20 text-blue-300 border-blue-400/40", "shadow-blue-500/25", Arrays.asList("Custom Table Name Tag", "Host Co-Player Recommendation")),
+                    new BadgeLevel(5, "Tabletop Strategist", "Silver Viceroy of Baner Tables", "Tabletop Champion", "Comfortably maneuvers euro-style resource management, engine building, and deduction games.", "🛡️", 40, 3, "Rare", "from-slate-700/40 via-indigo-950/50 to-slate-900", "border-slate-300/60", "text-slate-100", "bg-slate-200/20 text-slate-100 border-slate-300/50", "shadow-slate-300/25", Arrays.asList("Silver Shuffler Tier Status", "Tournament Seeding Priority")),
+                    new BadgeLevel(6, "Seasoned Shuffler", "Commander of a Thousand Battles", "Halfway to Catalog Mastery (50%+)", "Conquered half the official game library and a loyal regular at weekend gatherings.", "🌟", 50, 4, "Rare", "from-cyan-950/50 via-teal-950/40 to-slate-900", "border-cyan-400/70", "text-cyan-200", "bg-cyan-500/20 text-cyan-200 border-cyan-400/50", "shadow-cyan-400/30", Arrays.asList("New Game Library Voting Voice", "Exclusive Shuffler Community Role")),
+                    new BadgeLevel(7, "Master of Meeples", "Gold Sovereign of Strategy", "High Tactician (60%+)", "Commanding table presence with extensive knowledge across strategic and party classics.", "👑", 60, 5, "Epic", "from-amber-600/30 via-yellow-600/20 to-purple-950/50", "border-amber-400/80", "text-amber-200", "bg-amber-400/20 text-amber-200 border-amber-400/50", "shadow-amber-400/35", Arrays.asList("Gold Strategist Tier Status", "Complimentary Table Host Drink")),
+                    new BadgeLevel(8, "Grandmaster Tactician", "Platinum Grand Marshal", "Tabletop Virtuoso (70%+)", "Demonstrates surgical precision in deep euro-games, complex negotiations, and heavy card systems.", "💎", 70, 6, "Epic", "from-indigo-600/30 via-purple-600/20 to-sky-950/50", "border-indigo-400/80", "text-indigo-200", "bg-indigo-400/20 text-indigo-200 border-indigo-400/50", "shadow-indigo-400/40", Arrays.asList("VIP Game Day Lounge Pass", "Rule Explainer Recognition")),
+                    new BadgeLevel(9, "Tabletop Sovereign", "Diamond Regent of Tabletop Realms", "Pune Board Game Legend (80%+)", "A legendary pillar of Pune gaming who has conquered 80%+ of all curated board games.", "🌌", 80, 7, "Legendary", "from-purple-600/40 via-pink-600/30 to-amber-900/40", "border-purple-300", "text-purple-100", "bg-purple-500/30 text-purple-100 border-purple-300/60", "shadow-purple-400/50", Arrays.asList("Diamond Grandmaster Tier Status", "Permanent Hall of Fame Listing", "Private Table Reservation")),
+                    new BadgeLevel(10, "Apex Shuffler", "Mythic Tabletop Archon", "90%+ Catalog Mastery & Elite Veteran", "Supreme mastery of 90%+ games in Pune meetups. An immortal legend of Social Shuffle.", "⚡", 90, 8, "Mythic", "from-amber-400/40 via-purple-600/40 to-cyan-400/40", "border-amber-300", "text-amber-100", "bg-gradient-to-r from-amber-400/30 to-purple-400/30 text-amber-200 border-amber-300/70", "shadow-amber-400/60", Arrays.asList("Mythic Golden Avatar Crown", "Free VIP Entry to Annual Championship", "Name Etched onto Social Shuffle Trophy", "Lifetime Pune Shuffler Pioneer Status"))
             );
             badgeLevelRepository.saveAll(seeds);
         }
     }
 
-    private void seedRegistrationsIfEmpty() {
-        // Clean initial state: Registrations are created via live checkout and booking
-        log.info("Registrations table ready for live bookings.");
-    }
-
-    private void seedFeedbackIfEmpty() {
-        // Clean initial state: Feedback is collected after live meetups
-        log.info("Feedback table ready for participant submissions.");
+    private void seedCommunityStatsIfEmpty() {
+        if (communityStatsRepository.count() == 0) {
+            CommunityStats cs = new CommunityStats();
+            cs.setId("community-stats-main");
+            cs.setTotalMembers(1200);
+            cs.setTotalEvents(34);
+            cs.setTotalGames(85);
+            cs.setTotalCheckins(0);
+            cs.setActiveAreas("[\"Koregaon Park\",\"Baner\",\"Viman Nagar\",\"FC Road / Deccan\",\"Aundh\",\"Kothrud\",\"Kalyani Nagar\",\"Wakad\"]");
+            cs.setUpdatedBy("System Init");
+            cs.setUpdatedAt(Instant.now().toString());
+            communityStatsRepository.save(cs);
+        }
     }
 
     private void seedAuditAndNotificationsIfEmpty() {
         if (auditLogRepository.count() == 0) {
-            log.info("Seeding audit_logs table in database...");
-            AuditLog log1 = new AuditLog("log-1", "Parimal Shete", "SECURITY_INIT", "Database", "Direct DB query architecture activated across all domain entities", "2026-09-29T12:00:00Z");
-            auditLogRepository.save(log1);
+            auditLogRepository.save(new AuditLog("log-1", "Parimal Shete", "SECURITY_INIT", "PostgreSQL Database", "Unified PostgreSQL persistence verified across all modules", Instant.now().toString()));
         }
-
         if (notificationRepository.count() == 0) {
-            log.info("Seeding notifications table in database...");
-            NotificationItem notif = new NotificationItem("notif-1", "Social Shuffle #35 Live", "Meetup announced for Koregaon Park. Registrations are open!", "event", "2026-09-29T12:00:00Z", false);
-            notif.setRecipientEmail("birladiksha01@gmail.com");
+            NotificationItem notif = new NotificationItem("notif-1", "Social Shuffle #35 Live", "Meetup announced for Koregaon Park. Registrations are open!", "event", Instant.now().toString(), false);
             notif.setEventId("evt-35");
             notif.setDeliveryStatus("Sent");
             notificationRepository.save(notif);

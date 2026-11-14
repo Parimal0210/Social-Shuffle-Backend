@@ -92,6 +92,21 @@ public class Registration implements Serializable {
     @Column(name = "ticket_code", length = 64)
     private String ticketCode;
 
+    @Column(name = "checked_in_at", length = 50)
+    private String checkedInAt;
+
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
+
+    @Column(name = "payment_method", length = 50)
+    private String paymentMethod = "UPI";
+
+    @Column(name = "created_at", length = 50)
+    private String createdAt;
+
+    @Column(name = "updated_at", length = 50)
+    private String updatedAt;
+
     public Registration() {
     }
 
@@ -287,6 +302,46 @@ public class Registration implements Serializable {
 
     public void setGamesPlayed(List<String> gamesPlayed) {
         this.gamesPlayed = gamesPlayed != null ? gamesPlayed : new ArrayList<>();
+    }
+
+    public String getCheckedInAt() {
+        return checkedInAt != null ? checkedInAt : checkInTime;
+    }
+
+    public void setCheckedInAt(String checkedInAt) {
+        this.checkedInAt = checkedInAt;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public void setNotes(String notes) {
+        this.notes = notes;
+    }
+
+    public String getPaymentMethod() {
+        return paymentMethod;
+    }
+
+    public void setPaymentMethod(String paymentMethod) {
+        this.paymentMethod = paymentMethod;
+    }
+
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(String createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(String updatedAt) {
+        this.updatedAt = updatedAt;
     }
 
     @Override

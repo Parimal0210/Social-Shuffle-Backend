@@ -1,5 +1,6 @@
 package com.socialshuffle.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.io.Serializable;
 import java.time.Instant;
@@ -29,6 +30,7 @@ public class User implements Serializable {
     @Column(name = "phone", length = 50)
     private String phone;
 
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "password")
     private String password;
 

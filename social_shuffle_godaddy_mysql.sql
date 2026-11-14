@@ -20,11 +20,11 @@ CREATE TABLE `admins` (
   `name` VARCHAR(255) NOT NULL,
   `email` VARCHAR(150) NOT NULL,
   `phone` VARCHAR(50) DEFAULT NULL,
-  `password` VARCHAR(255) NOT NULL,
   `role` VARCHAR(50) DEFAULT 'admin',
   `designation` VARCHAR(100) DEFAULT 'Community Lead & Founder',
   `avatar` TEXT DEFAULT NULL,
   `bio` TEXT DEFAULT NULL,
+  `area` VARCHAR(255) DEFAULT 'Koregaon Park, Pune',
   `active` TINYINT(1) DEFAULT 1,
   `created_at` VARCHAR(50) DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -33,27 +33,28 @@ CREATE TABLE `admins` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------------------------
--- 2. Table structure for table `users`
+-- 2. Table structure for table `user_credentials`
+-- Dedicated credentials vault storing salted PBKDF2-HMAC-SHA512 password hashes
 -- ------------------------------------------------------------------------------
-DROP TABLE IF EXISTS `users`;
-CREATE TABLE `users` (
-  `id` VARCHAR(64) NOT NULL,
-  `name` VARCHAR(255) DEFAULT NULL,
+DROP TABLE IF EXISTS `user_credentials`;
+CREATE TABLE `user_credentials` (
+  `user_id` VARCHAR(64) NOT NULL,
+  `subject_type` ENUM('admin', 'participant') NOT NULL,
+  `subject_id` VARCHAR(64) NOT NULL,
   `email` VARCHAR(150) NOT NULL,
-  `phone` VARCHAR(50) DEFAULT NULL,
-  `password` VARCHAR(255) DEFAULT NULL,
-  `role` VARCHAR(30) DEFAULT 'participant',
-  `area` VARCHAR(255) DEFAULT NULL,
-  `avatar` TEXT DEFAULT NULL,
-  `bio` TEXT DEFAULT NULL,
-  `participant_id` VARCHAR(64) DEFAULT NULL,
+  `phone` VARCHAR(50) DEFAULT '',
+  `username` VARCHAR(150) DEFAULT '',
+  `password_hash` TEXT DEFAULT NULL,
   `auth_provider` VARCHAR(30) DEFAULT 'local',
-  `last_active_at` VARCHAR(50) DEFAULT NULL,
-  `login_at` VARCHAR(50) DEFAULT NULL,
-  `created_at` VARCHAR(50) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_users_email` (`email`),
-  KEY `idx_users_role` (`role`)
+  `failed_attempts` INT DEFAULT 0,
+  `locked_until` BIGINT DEFAULT NULL,
+  `last_login_at` VARCHAR(50) DEFAULT NULL,
+  `password_updated_at` VARCHAR(50) DEFAULT NULL,
+  `created_at` VARCHAR(50) NOT NULL,
+  `updated_at` VARCHAR(50) NOT NULL,
+  PRIMARY KEY (`user_id`),
+  UNIQUE KEY `uk_creds_email` (`email`),
+  KEY `idx_creds_subject` (`subject_type`, `subject_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------------------------
@@ -65,7 +66,6 @@ CREATE TABLE `participants` (
   `name` VARCHAR(255) DEFAULT NULL,
   `email` VARCHAR(150) NOT NULL,
   `phone` VARCHAR(50) DEFAULT NULL,
-  `password` VARCHAR(255) DEFAULT 'shuffler123',
   `username` VARCHAR(150) DEFAULT NULL,
   `area` VARCHAR(255) DEFAULT NULL,
   `avatar` TEXT DEFAULT NULL,
@@ -78,6 +78,8 @@ CREATE TABLE `participants` (
   `total_pax_brought` INT DEFAULT 0,
   `last_attended_event_id` VARCHAR(64) DEFAULT NULL,
   `last_attended_event_title` VARCHAR(255) DEFAULT NULL,
+  `auth_provider` VARCHAR(30) DEFAULT 'local',
+  `registered_at` VARCHAR(50) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_participants_email` (`email`),
   KEY `idx_participants_phone` (`phone`),
@@ -124,6 +126,7 @@ CREATE TABLE `events` (
   `planned_games` TEXT DEFAULT NULL,
   `status` VARCHAR(50) DEFAULT 'upcoming',
   `cover_image` TEXT DEFAULT NULL,
+  `map_location` TEXT DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_events_date` (`date`),
   KEY `idx_events_status` (`status`)
@@ -215,8 +218,15 @@ CREATE TABLE `registrations` (
   `amount_paid` INT DEFAULT 350,
   `attendance_status` VARCHAR(50) DEFAULT 'Registered',
   `check_in_time` VARCHAR(50) DEFAULT NULL,
+  `checked_in_at` VARCHAR(50) DEFAULT NULL,
+  `games_played` TEXT DEFAULT NULL,
   `ticket_code` VARCHAR(100) DEFAULT NULL,
+  `qr_code_token` VARCHAR(100) DEFAULT NULL,
+  `qr_code_url` TEXT DEFAULT NULL,
+  `razorpay_payment_id` VARCHAR(100) DEFAULT NULL,
+  `razorpay_order_id` VARCHAR(100) DEFAULT NULL,
   `registered_at` VARCHAR(50) DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_regs_event` (`event_id`),
   KEY `idx_regs_participant` (`participant_id`)
@@ -315,19 +325,13 @@ CREATE TABLE `notifications` (
 -- INITIAL SEED DATA (FETCHED DIRECTLY FROM DATABASE TABLES ONLY)
 -- ==============================================================================
 
--- 1. Seed `admins`
-INSERT INTO `admins` (`id`, `name`, `email`, `phone`, `password`, `role`, `designation`, `avatar`, `bio`, `active`, `created_at`) VALUES
-('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Community Architect', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Community Architect', 1, '2024-01-01T00:00:00Z'),
-('u-admin-diksha', 'Diksha', 'birladiksha01@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Co-Founder & Experience Director', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Experience Director', 1, '2024-01-01T00:00:00Z')
-ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `email`=VALUES(`email`), `phone`=VALUES(`phone`), `role`=VALUES(`role`), `designation`=VALUES(`designation`), `active`=VALUES(`active`);
+-- 1. Seed `admins` (credentials managed separately in `user_credentials` with salted PBKDF2 hashes)
+INSERT INTO `admins` (`id`, `name`, `email`, `phone`, `role`, `designation`, `avatar`, `bio`, `area`, `active`, `created_at`) VALUES
+('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 92849 83072', 'admin', 'Co-Founder & Community Architect', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Community Architect', 'Koregaon Park, Pune', 1, '2024-01-01T00:00:00Z'),
+('u-admin-diksha', 'Diksha', 'birladiksha01@gmail.com', '+91 92849 83072', 'admin', 'Co-Founder & Experience Director', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Social Shuffle Co-Founder & Experience Director', 'Kalyani Nagar, Pune', 1, '2024-01-01T00:00:00Z')
+ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `email`=VALUES(`email`), `phone`=VALUES(`phone`), `role`=VALUES(`role`), `designation`=VALUES(`designation`), `area`=VALUES(`area`), `active`=VALUES(`active`);
 
--- 2. Seed `users`
-INSERT INTO `users` (`id`, `name`, `email`, `phone`, `password`, `role`, `area`, `avatar`, `bio`, `participant_id`, `auth_provider`, `last_active_at`, `login_at`, `created_at`) VALUES
-('u-admin-parimal', 'Parimal Shete', 'parimalmshete@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Koregaon Park', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200', 'Co-Founder & Community Architect at Social Shuffle', NULL, 'google', '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z', '2024-01-01T00:00:00Z'),
-('u-admin-diksha', 'Diksha', 'birladiksha01@gmail.com', '+91 92849 83072', 'admin123', 'admin', 'Kalyani Nagar', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200', 'Co-Founder & Experience Director at Social Shuffle', NULL, 'google', '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z', '2024-01-01T00:00:00Z')
-ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `email`=VALUES(`email`), `phone`=VALUES(`phone`), `role`=VALUES(`role`), `area`=VALUES(`area`);
-
--- 3. `participants` (Clean initial state: populated as real users register)
+-- 2. `participants` & `user_credentials` (hashed credentials initialized by backend auth engine)
 
 -- 4. Seed `venues`
 INSERT INTO `venues` (`id`, `name`, `address`, `area`, `capacity`, `contact_phone`, `maps_url`, `image`, `active`) VALUES
@@ -381,14 +385,14 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 
 -- ------------------------------------------------------------------------------
--- Seed Participants Table with Real Pune Shuffler Profiles & Credentials
+-- Seed Participants Table with Real Pune Shuffler Profiles (credentials in user_credentials)
 -- ------------------------------------------------------------------------------
-INSERT INTO `participants` (`id`, `name`, `email`, `phone`, `password`, `username`, `area`, `avatar`, `bio`, `joined_date`, `total_events_attended`, `total_registrations`, `games_played_ids`, `venues_visited`, `total_pax_brought`, `last_attended_event_id`, `last_attended_event_title`) VALUES
-  ('p-varad', 'Varad', 'varad@socialshuffle.in', '+91 98221 12345', 'shuffler123', 'varad', 'Koregaon Park', 'https://api.dicebear.com/7.x/bottts/svg?seed=Varad', 'Pune board game enthusiast • Catan & Social Deduction lover!', '2026-11-11', 0, 0, '[]', '[]', 0, NULL, NULL),
-  ('p-mw97kkb5', 'Aman Sharma', 'aman.sharma@example.com', '9822099112', 'mysecretpass', 'aman.sharma', 'Baner', 'https://api.dicebear.com/7.x/bottts/svg?seed=Aman%20Sharma', 'Board game lover eager to play!', '2026-11-09', 0, 0, '[]', '[]', 0, NULL, NULL),
-  ('p-priya', 'Priya Nair', 'priya.nair@example.com', '+91 97632 99011', 'shuffler123', 'priya.nair', 'Wakad', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80', 'Weekly regular shuffler. Always looking for teammates for Just One & Wingspan!', '2024-01-15', 6, 7, '["g-codenames","g-justone","g-azul","g-wingspan","g-dixit","g-cascadia"]', '["Toit Brewery","FC Road Social","Waari Book Cafe"]', 3, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-rohan', 'Rohan Deshmukh', 'rohan.deshmukh@example.com', '+91 98223 44551', 'shuffler123', 'rohan.deshmukh', 'Koregaon Park', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80', 'Heavy strategy enthusiast. Terraforming Mars, Dune Imperium & Scythe fan.', '2024-01-05', 11, 12, '["g-dune","g-terraformingmars","g-scythe","g-brass","g-root"]', '["Toit Brewery","FC Road Social","Effingut KP","Waari Book Cafe"]', 8, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-ananya', 'Ananya Kulkarni', 'ananya.k@example.com', '+91 98901 22334', 'shuffler123', 'ananya.k', 'Baner', 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=160&q=80', 'Designer by day, social deduction master by night. Secret Hitler champ.', '2024-01-20', 8, 8, '["g-secrethitler","g-avalon","g-bloodontheclocktower","g-decrypto","g-wavelength"]', '["Toit Brewery","Waari Book Cafe"]', 5, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-tanmay', 'Tanmay Joshi', 'tanmay.j@example.com', '+91 98221 88990', 'shuffler123', 'tanmay.j', 'Viman Nagar', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=160&q=80', 'Love learning new modern European games and meeting new people over coffee.', '2024-02-01', 5, 6, '["g-catan","g-ticketoride","g-carcassonne","g-splendor","g-cascadia"]', '["FC Road Social","Toit Brewery"]', 2, 'ev-ss2', 'Strategy & Heavyweight Battles'),
-  ('p-sneha', 'Sneha Patil', 'sneha.patil@example.com', '+91 97665 11223', 'shuffler123', 'sneha.patil', 'Aundh', 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80', 'Board game collector and casual teacher. Let us play Cascadia and Sushi Go!', '2024-02-14', 4, 4, '["g-cascadia","g-sushigo","g-azul","g-flip7","g-dixit"]', '["Waari Book Cafe","FC Road Social"]', 1, 'ev-ss3', 'Secret Social & Mystery Games'),
-  ('p-aditya', 'Aditya Shinde', 'aditya.shinde@example.com', '+91 98220 33445', 'shuffler123', 'aditya.shinde', 'Kothrud', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80', 'Tournament competitor. Competitive Spirit Island and Blood on the Clocktower storyteller.', '2024-01-10', 9, 10, '["g-spiritisland","g-bloodontheclocktower","g-dune","g-root","g-clank"]', '["Toit Brewery","FC Road Social","Effingut KP"]', 6, 'ev-ss3', 'Secret Social & Mystery Games');
+INSERT INTO `participants` (`id`, `name`, `email`, `phone`, `username`, `area`, `avatar`, `bio`, `joined_date`, `total_events_attended`, `total_registrations`, `games_played_ids`, `venues_visited`, `total_pax_brought`, `last_attended_event_id`, `last_attended_event_title`) VALUES
+  ('p-varad', 'Varad', 'varad@socialshuffle.in', '+91 98221 12345', 'varad', 'Koregaon Park', 'https://api.dicebear.com/7.x/bottts/svg?seed=Varad', 'Pune board game enthusiast • Catan & Social Deduction lover!', '2026-11-11', 0, 0, '[]', '[]', 0, NULL, NULL),
+  ('p-mw97kkb5', 'Aman Sharma', 'aman.sharma@example.com', '9822099112', 'aman.sharma', 'Baner', 'https://api.dicebear.com/7.x/bottts/svg?seed=Aman%20Sharma', 'Board game lover eager to play!', '2026-11-09', 0, 0, '[]', '[]', 0, NULL, NULL),
+  ('p-priya', 'Priya Nair', 'priya.nair@example.com', '+91 97632 99011', 'priya.nair', 'Wakad', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80', 'Weekly regular shuffler. Always looking for teammates for Just One & Wingspan!', '2024-01-15', 6, 7, '["g-codenames","g-justone","g-azul","g-wingspan","g-dixit","g-cascadia"]', '["Toit Brewery","FC Road Social","Waari Book Cafe"]', 3, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-rohan', 'Rohan Deshmukh', 'rohan.deshmukh@example.com', '+91 98223 44551', 'rohan.deshmukh', 'Koregaon Park', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80', 'Heavy strategy enthusiast. Terraforming Mars, Dune Imperium & Scythe fan.', '2024-01-05', 11, 12, '["g-dune","g-terraformingmars","g-scythe","g-brass","g-root"]', '["Toit Brewery","FC Road Social","Effingut KP","Waari Book Cafe"]', 8, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-ananya', 'Ananya Kulkarni', 'ananya.k@example.com', '+91 98901 22334', 'ananya.k', 'Baner', 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=160&q=80', 'Designer by day, social deduction master by night. Secret Hitler champ.', '2024-01-20', 8, 8, '["g-secrethitler","g-avalon","g-bloodontheclocktower","g-decrypto","g-wavelength"]', '["Toit Brewery","Waari Book Cafe"]', 5, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-tanmay', 'Tanmay Joshi', 'tanmay.j@example.com', '+91 98221 88990', 'tanmay.j', 'Viman Nagar', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=160&q=80', 'Love learning new modern European games and meeting new people over coffee.', '2024-02-01', 5, 6, '["g-catan","g-ticketoride","g-carcassonne","g-splendor","g-cascadia"]', '["FC Road Social","Toit Brewery"]', 2, 'ev-ss2', 'Strategy & Heavyweight Battles'),
+  ('p-sneha', 'Sneha Patil', 'sneha.patil@example.com', '+91 97665 11223', 'sneha.patil', 'Aundh', 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80', 'Board game collector and casual teacher. Let us play Cascadia and Sushi Go!', '2024-02-14', 4, 4, '["g-cascadia","g-sushigo","g-azul","g-flip7","g-dixit"]', '["Waari Book Cafe","FC Road Social"]', 1, 'ev-ss3', 'Secret Social & Mystery Games'),
+  ('p-aditya', 'Aditya Shinde', 'aditya.shinde@example.com', '+91 98220 33445', 'aditya.shinde', 'Kothrud', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80', 'Tournament competitor. Competitive Spirit Island and Blood on the Clocktower storyteller.', '2024-01-10', 9, 10, '["g-spiritisland","g-bloodontheclocktower","g-dune","g-root","g-clank"]', '["Toit Brewery","FC Road Social","Effingut KP"]', 6, 'ev-ss3', 'Secret Social & Mystery Games');

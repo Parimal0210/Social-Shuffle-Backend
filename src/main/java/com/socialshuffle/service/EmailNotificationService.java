@@ -1,335 +1,560 @@
 package com.socialshuffle.service;
 
-import com.socialshuffle.model.Registration;
-import com.socialshuffle.model.ShuffleEvent;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.socialshuffle.model.*;
+import com.socialshuffle.repository.RegistrationRepository;
+import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.*;
 
 @Service
 public class EmailNotificationService {
 
     private static final Logger logger = LoggerFactory.getLogger(EmailNotificationService.class);
 
+    private final AppConfigService appConfigService;
+    private final RegistrationRepository registrationRepository;
+    private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
+
+    private volatile String lastSenderFingerprint = "";
+    private volatile JavaMailSenderImpl cachedMailSender;
+
+    public record EmailDeliveryResult(boolean success, String provider, String messageId, String error) {}
+
+    public EmailNotificationService(AppConfigService appConfigService,
+                                    RegistrationRepository registrationRepository,
+                                    ObjectMapper objectMapper) {
+        this.appConfigService = appConfigService;
+        this.registrationRepository = registrationRepository;
+        this.objectMapper = objectMapper;
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(8))
+                .build();
+    }
+
     /**
-     * Builds the quirky and grateful HTML email for successful event registration.
+     * Core real multi-provider email transport:
+     * 1) Gmail OAuth2 REST API (if connected via OAuth)
+     * 2) SMTP via JavaMailSenderImpl (primary port + 465 SSL failover)
+     * 3) Resend HTTPS REST API (if RESEND_API_KEY configured)
      */
+    public EmailDeliveryResult dispatchEmail(String to, String subject, String html, String plainText) {
+        if (to == null || !to.contains("@")) {
+            return new EmailDeliveryResult(false, "none", null, "Invalid recipient email address");
+        }
+        String cleanTo = to.trim();
+        Map<String, Object> cfg = appConfigService.getCommunicationsConfig();
+        String fromAddr = resolveFromAddress(cfg);
+        List<String> errors = new ArrayList<>();
+
+        // 1. Try Gmail OAuth2 REST API if connected & token present
+        String gmailAccessToken = str(cfg.get("gmailAccessToken"));
+        boolean gmailConnected = Boolean.TRUE.equals(cfg.get("gmailConnected")) && !gmailAccessToken.isEmpty();
+        long gmailExpiresAt = cfg.get("gmailExpiresAt") instanceof Number ? ((Number) cfg.get("gmailExpiresAt")).longValue() : 0L;
+        if (gmailConnected && (gmailExpiresAt == 0L || gmailExpiresAt > System.currentTimeMillis())) {
+            EmailDeliveryResult gmailRes = sendViaGmailApi(gmailAccessToken, str(cfg.get("gmailEmail")), cleanTo, subject, html);
+            if (gmailRes.success()) {
+                return gmailRes;
+            }
+            errors.add("Gmail OAuth: " + gmailRes.error());
+        }
+
+        // 2. Try configured SMTP (with 587 <-> 465 SSL failover for reliability)
+        String smtpHost = nonEmpty(str(cfg.get("smtpHost")), "smtp.gmail.com");
+        int smtpPort = cfg.get("smtpPort") instanceof Number ? ((Number) cfg.get("smtpPort")).intValue() : 587;
+        String smtpUser = str(cfg.get("smtpUser"));
+        String smtpPass = str(cfg.get("smtpPass")).replaceAll("\\s+", "");
+
+        if (!smtpUser.isEmpty() && !smtpPass.isEmpty()) {
+            EmailDeliveryResult primary = sendViaSmtp(smtpHost, smtpPort, smtpUser, smtpPass, fromAddr, cleanTo, subject, html, plainText);
+            if (primary.success()) {
+                return primary;
+            }
+            errors.add("SMTP(" + smtpHost + ":" + smtpPort + "): " + primary.error());
+
+            int altPort = (smtpPort == 465) ? 587 : 465;
+            EmailDeliveryResult failover = sendViaSmtp(smtpHost, altPort, smtpUser, smtpPass, fromAddr, cleanTo, subject, html, plainText);
+            if (failover.success()) {
+                return failover;
+            }
+            errors.add("SMTP(" + smtpHost + ":" + altPort + "): " + failover.error());
+        }
+
+        // 3. Try Resend REST API fallback if API key configured
+        String resendKey = str(cfg.get("resendApiKey"));
+        if (!resendKey.isEmpty()) {
+            EmailDeliveryResult resend = sendViaResend(resendKey, fromAddr, cleanTo, subject, html, plainText);
+            if (resend.success()) {
+                return resend;
+            }
+            errors.add("Resend: " + resend.error());
+        }
+
+        if (errors.isEmpty()) {
+            String errMsg = "Email transport is not configured. Please set SMTP_USER / SMTP_PASS or connect Gmail / Resend in Admin -> Communications Settings.";
+            logger.warn("[Mail] {}", errMsg);
+            return new EmailDeliveryResult(false, "none", null, errMsg);
+        }
+
+        String combinedErr = String.join(" | ", errors);
+        logger.error("[Mail] All providers failed for {}: {}", cleanTo, combinedErr);
+        return new EmailDeliveryResult(false, "failed", null, combinedErr);
+    }
+
+    private EmailDeliveryResult sendViaSmtp(String host, int port, String user, String pass,
+                                            String fromAddr, String to, String subject, String html, String plainText) {
+        try {
+            JavaMailSenderImpl sender = getOrCreateMailSender(host, port, user, pass);
+            MimeMessage mimeMessage = sender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, StandardCharsets.UTF_8.name());
+            helper.setFrom("Social Shuffle Pune <" + (fromAddr.contains("@") ? fromAddr : user) + ">");
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(plainText != null ? plainText : stripHtml(html), html);
+
+            sender.send(mimeMessage);
+            String msgId = mimeMessage.getMessageID();
+            logger.info("[Mail:SMTP] Sent '{}' to {} (port={})", subject, to, port);
+            return new EmailDeliveryResult(true, "smtp", msgId != null ? msgId : "smtp-" + System.currentTimeMillis(), null);
+        } catch (Exception ex) {
+            return new EmailDeliveryResult(false, "smtp", null, ex.getMessage());
+        }
+    }
+
+    private JavaMailSenderImpl getOrCreateMailSender(String host, int port, String user, String pass) {
+        String fingerprint = host + "|" + port + "|" + user + "|" + pass.hashCode();
+        if (cachedMailSender != null && fingerprint.equals(lastSenderFingerprint)) {
+            return cachedMailSender;
+        }
+        JavaMailSenderImpl impl = new JavaMailSenderImpl();
+        impl.setHost(host);
+        impl.setPort(port);
+        impl.setUsername(user);
+        impl.setPassword(pass);
+        impl.setDefaultEncoding(StandardCharsets.UTF_8.name());
+
+        Properties props = impl.getJavaMailProperties();
+        props.put("mail.transport.protocol", "smtp");
+        props.put("mail.smtp.auth", "true");
+        props.put("mail.smtp.connectiontimeout", "6000");
+        props.put("mail.smtp.timeout", "8000");
+        props.put("mail.smtp.writetimeout", "8000");
+        if (port == 465) {
+            props.put("mail.smtp.ssl.enable", "true");
+            props.put("mail.smtp.starttls.enable", "false");
+        } else {
+            props.put("mail.smtp.starttls.enable", "true");
+            props.put("mail.smtp.starttls.required", "false");
+        }
+        cachedMailSender = impl;
+        lastSenderFingerprint = fingerprint;
+        return impl;
+    }
+
+    private EmailDeliveryResult sendViaGmailApi(String accessToken, String gmailFrom, String to, String subject, String html) {
+        try {
+            JavaMailSenderImpl tmp = new JavaMailSenderImpl();
+            MimeMessage msg = tmp.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(msg, false, StandardCharsets.UTF_8.name());
+            if (gmailFrom != null && gmailFrom.contains("@")) {
+                helper.setFrom("Social Shuffle Pune <" + gmailFrom + ">");
+            }
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+            msg.saveChanges();
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            msg.writeTo(baos);
+            String rawEncoded = Base64.getUrlEncoder().withoutPadding().encodeToString(baos.toByteArray());
+
+            String jsonBody = objectMapper.writeValueAsString(Map.of("raw", rawEncoded));
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create("https://gmail.googleapis.com/gmail/v1/users/me/messages/send"))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Authorization", "Bearer " + accessToken)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
+                Map<?, ?> parsed = objectMapper.readValue(resp.body(), Map.class);
+                String id = parsed.get("id") != null ? String.valueOf(parsed.get("id")) : "gmail-sent";
+                return new EmailDeliveryResult(true, "gmail-oauth2", id, null);
+            }
+            return new EmailDeliveryResult(false, "gmail-oauth2", null, "HTTP " + resp.statusCode() + ": " + resp.body());
+        } catch (Exception ex) {
+            return new EmailDeliveryResult(false, "gmail-oauth2", null, ex.getMessage());
+        }
+    }
+
+    private EmailDeliveryResult sendViaResend(String apiKey, String fromAddr, String to, String subject, String html, String plainText) {
+        try {
+            String from = fromAddr.contains("@") ? ("Social Shuffle Pune <" + fromAddr + ">") : "Social Shuffle Pune <onboarding@resend.dev>";
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("from", from);
+            body.put("to", Collections.singletonList(to));
+            body.put("subject", subject);
+            body.put("html", html);
+            body.put("text", plainText != null ? plainText : stripHtml(html));
+
+            String json = objectMapper.writeValueAsString(body);
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.resend.com/emails"))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
+                Map<?, ?> parsed = objectMapper.readValue(resp.body(), Map.class);
+                String id = parsed.get("id") != null ? String.valueOf(parsed.get("id")) : "resend-sent";
+                return new EmailDeliveryResult(true, "resend", id, null);
+            }
+            return new EmailDeliveryResult(false, "resend", null, "HTTP " + resp.statusCode() + ": " + resp.body());
+        } catch (Exception ex) {
+            return new EmailDeliveryResult(false, "resend", null, ex.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // Synchronous OTP & Test Emails
+    // =========================================================================
+
+    public EmailDeliveryResult sendOtpEmailSync(String toEmail, String name, String otp) {
+        String safeName = escapeHtml(nonEmpty(name, "Fellow Shuffler"));
+        String safeOtp = escapeHtml(otp);
+        String subject = otp + " is your Social Shuffle Pune verification code";
+        String html = "<div style='font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:560px;margin:20px auto;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:16px;overflow:hidden'>"
+                + "<div style='background:linear-gradient(135deg,#FF6036,#FF751F);padding:28px 24px;text-align:center;color:#fff'>"
+                + "<div style='font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px'>Social Shuffle Pune</div>"
+                + "<h1 style='margin:0;font-size:24px;font-weight:900'>Verify Your Email</h1></div>"
+                + "<div style='padding:28px 24px'>"
+                + "<p style='margin-top:0;font-size:15px'>Hey <strong>" + safeName + "</strong>,</p>"
+                + "<p style='font-size:14px;color:#cbd5e1;line-height:1.6'>Use the 6-digit one-time verification code below to complete your Social Shuffle registration:</p>"
+                + "<div style='margin:24px 0;padding:20px;background:#1e293b;border:2px dashed #FF751F;border-radius:12px;text-align:center'>"
+                + "<div style='font-family:monospace;font-size:36px;font-weight:900;letter-spacing:8px;color:#FFC226'>" + safeOtp + "</div>"
+                + "<div style='font-size:12px;color:#94a3b8;margin-top:8px'>Valid for 10 minutes • Never share this code</div></div>"
+                + "<p style='font-size:12px;color:#64748b;margin-bottom:0'>If you didn't request this code, you can safely ignore this email.</p>"
+                + "</div></div>";
+        String plain = "Hey " + nonEmpty(name, "Fellow Shuffler") + ",\nYour Social Shuffle Pune verification code is: " + otp + "\nValid for 10 minutes.";
+        return dispatchEmail(toEmail, subject, html, plain);
+    }
+
+    // =========================================================================
+    // Non-Blocking Async Lifecycle Emails
+    // =========================================================================
+
+    @Async("mailTaskExecutor")
+    public void sendWelcomeEmailAsync(String toEmail, String name) {
+        try {
+            String safeName = escapeHtml(nonEmpty(name, "Shuffler"));
+            String subject = "Welcome to Social Shuffle Pune, " + nonEmpty(name, "Shuffler") + "!";
+            String html = "<div style='font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:580px;margin:20px auto;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:16px;overflow:hidden'>"
+                    + "<div style='background:linear-gradient(135deg,#0284c7,#7c3aed);padding:32px 24px;text-align:center;color:#fff'>"
+                    + "<h1 style='margin:0;font-size:26px;font-weight:900'>Welcome to the Table, " + safeName + "!</h1></div>"
+                    + "<div style='padding:28px 24px;font-size:14px;line-height:1.65;color:#cbd5e1'>"
+                    + "<p>Your Shuffler account is now active! You can RSVP for Pune weekend board game meetups, track games played, unlock badges, and carry your QR check-in pass.</p>"
+                    + "<p style='margin-bottom:0'>See you at the next meetup across Koregaon Park, Baner, Viman Nagar, or FC Road!</p>"
+                    + "</div></div>";
+            dispatchEmail(toEmail, subject, html, "Welcome to Social Shuffle Pune, " + nonEmpty(name, "Shuffler") + "! Your account is active.");
+        } catch (Exception e) {
+            logger.warn("Async welcome email failed for {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    @Async("mailTaskExecutor")
+    public void sendRegistrationConfirmationAsync(Registration registration, ShuffleEvent event) {
+        if (registration == null || registration.getParticipantEmail() == null || registration.getParticipantEmail().trim().isEmpty()) {
+            return;
+        }
+        EmailDeliveryResult res = sendRegistrationConfirmationSync(registration, event);
+        if (res.success()) {
+            try {
+                registrationRepository.findById(registration.getId()).ifPresent(existing -> {
+                    existing.setEmailSent(true);
+                    existing.setEmailSentAt(Instant.now().toString());
+                    registrationRepository.save(existing);
+                });
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    public EmailDeliveryResult sendRegistrationConfirmationSync(Registration registration, ShuffleEvent event) {
+        String eventTitle = event != null && event.getTitle() != null ? event.getTitle() : "Social Shuffle Meetup";
+        String html = generateQuirkyRegistrationEmailHtml(registration, event);
+        String subject = "Registration Pass Confirmed: " + eventTitle;
+        return dispatchEmail(registration.getParticipantEmail(), subject, html, "Your Social Shuffle registration pass (" + registration.getQrCodeToken() + ") for " + eventTitle + " is confirmed.");
+    }
+
+    @Async("mailTaskExecutor")
+    public void sendVolunteerConfirmationAndAdminAlertAsync(VolunteerApplication app) {
+        if (app == null) return;
+        try {
+            if (app.getEmail() != null && app.getEmail().contains("@")) {
+                String safeName = escapeHtml(nonEmpty(app.getName(), "Volunteer"));
+                String html = "<div style='font-family:sans-serif;max-width:560px;margin:20px auto;background:#0f172a;color:#e2e8f0;padding:28px;border-radius:16px;border:1px solid #334155'>"
+                        + "<h2 style='color:#FFC226;margin-top:0'>Volunteer Application Received!</h2>"
+                        + "<p>Hey <strong>" + safeName + "</strong>, thank you for applying to volunteer with Social Shuffle Pune.</p>"
+                        + "<p>Our organizers (Parimal & Diksha) will review your application for <strong>" + escapeHtml(nonEmpty(app.getArea(), "Pune")) + "</strong> and get in touch shortly.</p>"
+                        + "</div>";
+                dispatchEmail(app.getEmail(), "Volunteer Application Received - Social Shuffle Pune", html, null);
+            }
+            String adminEmail = resolveAdminEmail();
+            if (!adminEmail.isEmpty()) {
+                String adminHtml = "<div style='font-family:sans-serif;max-width:560px;margin:20px auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:12px'>"
+                        + "<h2 style='color:#35C8A8;margin-top:0'>New Volunteer Application</h2>"
+                        + "<p><strong>Name:</strong> " + escapeHtml(app.getName()) + "</p>"
+                        + "<p><strong>Email:</strong> " + escapeHtml(app.getEmail()) + "</p>"
+                        + "<p><strong>Phone:</strong> " + escapeHtml(app.getPhone()) + "</p>"
+                        + "<p><strong>Area:</strong> " + escapeHtml(app.getArea()) + "</p>"
+                        + "<p><strong>Experience:</strong> " + escapeHtml(app.getExperience()) + "</p>"
+                        + "</div>";
+                dispatchEmail(adminEmail, "New Volunteer Application: " + nonEmpty(app.getName(), "Applicant"), adminHtml, null);
+            }
+        } catch (Exception e) {
+            logger.warn("Async volunteer notification failed: {}", e.getMessage());
+        }
+    }
+
+    @Async("mailTaskExecutor")
+    public void sendSafetyReportAdminAlertAsync(SafetyReport report) {
+        if (report == null) return;
+        try {
+            String adminEmail = resolveAdminEmail();
+            if (!adminEmail.isEmpty()) {
+                String adminHtml = "<div style='font-family:sans-serif;max-width:560px;margin:20px auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:12px;border:1px solid #ef4444'>"
+                        + "<h2 style='color:#f87171;margin-top:0'>Safety Report Submitted</h2>"
+                        + "<p><strong>Type:</strong> " + escapeHtml(nonEmpty(report.getType(), report.getCategory())) + "</p>"
+                        + "<p><strong>Event:</strong> " + escapeHtml(nonEmpty(report.getEventTitle(), report.getEventId())) + "</p>"
+                        + "<p><strong>Description:</strong> " + escapeHtml(report.getDescription()) + "</p>"
+                        + "<p><strong>Anonymous:</strong> " + (report.isAnonymous() ? "Yes" : "No (" + escapeHtml(report.getReporterName()) + ")") + "</p>"
+                        + "</div>";
+                dispatchEmail(adminEmail, "[Safety Alert] New Community Report", adminHtml, null);
+            }
+        } catch (Exception e) {
+            logger.warn("Async safety report notification failed: {}", e.getMessage());
+        }
+    }
+
+    @Async("mailTaskExecutor")
+    public void sendFeedbackAdminAlertAsync(EventFeedback feedback) {
+        if (feedback == null) return;
+        try {
+            String adminEmail = resolveAdminEmail();
+            if (!adminEmail.isEmpty()) {
+                String html = "<div style='font-family:sans-serif;max-width:560px;margin:20px auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:12px'>"
+                        + "<h2 style='color:#FFC226;margin-top:0'>New Meetup Feedback</h2>"
+                        + "<p><strong>Event:</strong> " + escapeHtml(nonEmpty(feedback.getEventTitle(), feedback.getEventId())) + "</p>"
+                        + "<p><strong>Rating:</strong> " + feedback.getOverallRating() + "/5</p>"
+                        + "<p><strong>From:</strong> " + (feedback.isAnonymous() ? "Anonymous" : escapeHtml(feedback.getParticipantName())) + "</p>"
+                        + "<p><strong>Suggestions:</strong> " + escapeHtml(feedback.getSuggestions()) + "</p>"
+                        + "</div>";
+                dispatchEmail(adminEmail, "Meetup Feedback Received (" + feedback.getOverallRating() + "/5)", html, null);
+            }
+        } catch (Exception e) {
+            logger.warn("Async feedback notification failed: {}", e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // Existing Sync Helpers Upgraded to Real Dispatch
+    // =========================================================================
+
+    public boolean sendRegistrationConfirmationEmail(Registration registration, ShuffleEvent event) {
+        String qrToken = registration.getQrCodeToken() != null ? registration.getQrCodeToken() : ("SS-REG-" + registration.getId());
+        registration.setQrCodeToken(qrToken);
+        registration.setQrCodeUrl("https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=" + qrToken);
+        EmailDeliveryResult res = sendRegistrationConfirmationSync(registration, event);
+        if (res.success()) {
+            registration.setEmailSent(true);
+            registration.setEmailSentAt(Instant.now().toString());
+        }
+        return res.success();
+    }
+
+    public boolean sendEventReminderEmail(Registration registration, ShuffleEvent event, String customNote) {
+        String html = generateUpcomingEventReminderEmailHtml(registration, event, customNote);
+        String subject = "Reminder: " + (event != null && event.getTitle() != null ? event.getTitle() : "Social Shuffle Meetup");
+        return dispatchEmail(registration.getParticipantEmail(), subject, html, null).success();
+    }
+
+    public boolean sendEventBroadcastEmail(Registration registration, ShuffleEvent event, String subject, String message, boolean includeQrPass) {
+        String html = generateEventBroadcastEmailHtml(registration, event, subject, message, includeQrPass);
+        return dispatchEmail(registration.getParticipantEmail(), subject, html, message).success();
+    }
+
+    public boolean sendCommunityAnnouncementEmail(String email, String name, String title, String message) {
+        String html = generateCommunityAnnouncementEmailHtml(name, title, message);
+        return dispatchEmail(email, title, html, message).success();
+    }
+
+    // =========================================================================
+    // HTML Template Generators
+    // =========================================================================
+
     public String generateQuirkyRegistrationEmailHtml(Registration registration, ShuffleEvent event) {
-        String recipientName = registration.getParticipantName() != null ? registration.getParticipantName() : "Fellow Shuffler";
-        String eventTitle = event != null && event.getTitle() != null ? event.getTitle() : "Pune Board Game Shuffler Meetup";
-        String eventVenue = event != null && event.getVenue() != null ? event.getVenue() : "Pune Meetup Hub";
-        String eventAddress = event != null && event.getAddress() != null ? event.getAddress() : "Pune, Maharashtra";
-        String eventTime = event != null && event.getTime() != null ? event.getTime() : "Check app schedule";
+        String recipientName = escapeHtml(registration.getParticipantName() != null ? registration.getParticipantName() : "Fellow Shuffler");
+        String eventTitle = escapeHtml(event != null && event.getTitle() != null ? event.getTitle() : "Pune Board Game Shuffler Meetup");
+        String eventVenue = escapeHtml(event != null && event.getVenue() != null ? event.getVenue() : "Pune Meetup Hub");
+        String eventAddress = escapeHtml(event != null && event.getAddress() != null ? event.getAddress() : "Pune, Maharashtra");
+        String eventTime = escapeHtml(event != null && event.getTime() != null ? event.getTime() : "Check app schedule");
         int pax = registration.getPaxCount() > 0 ? registration.getPaxCount() : 1;
         String qrToken = registration.getQrCodeToken() != null ? registration.getQrCodeToken() : ("SS-REG-" + registration.getId());
-        
+
         String encodedQrData = URLEncoder.encode(qrToken, StandardCharsets.UTF_8);
         String qrImageUrl = "https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=" + encodedQrData;
 
         String guestListHtml = "";
         if (registration.getGuests() != null && !registration.getGuests().isEmpty()) {
             StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < registration.getGuests().size(); i++) {
-                com.socialshuffle.model.GuestInfo g = registration.getGuests().get(i);
+            for (GuestInfo g : registration.getGuests()) {
                 if (g.getName() != null && !g.getName().trim().isEmpty()) {
                     if (sb.length() > 0) sb.append(", ");
-                    sb.append(g.getName().trim());
+                    sb.append(escapeHtml(g.getName().trim()));
                 }
             }
             if (sb.length() > 0) {
-                guestListHtml = "<div class='field'><span class='label'>Accompanying Guests:</span><span class='val' style='color: #c084fc;'>" + sb.toString() + "</span></div>";
+                guestListHtml = "<div class='field'><span class='label'>Accompanying Guests:</span><span class='val' style='color:#c084fc'>" + sb + "</span></div>";
             }
         }
 
-        return "<!DOCTYPE html>" +
-                "<html>" +
-                "<head>" +
-                "<meta charset='UTF-8'>" +
-                "<style>" +
-                "  body { margin: 0; padding: 0; background-color: #0f111a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #e2e8f0; }" +
-                "  .container { max-width: 600px; margin: 0 auto; background-color: #161824; border: 1px solid #2d3748; border-radius: 16px; overflow: hidden; margin-top: 24px; margin-bottom: 30px; }" +
-                "  .header { background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); padding: 32px 24px; text-align: center; color: #ffffff; }" +
-                "  .badge { display: inline-block; background-color: #fbbf24; color: #1e1b4b; font-weight: 800; font-size: 11px; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }" +
-                "  .title { margin: 0; font-size: 26px; font-weight: 900; line-height: 1.2; }" +
-                "  .body { padding: 32px 28px; }" +
-                "  .quirky-box { background: rgba(124, 58, 237, 0.08); border-left: 4px solid #a855f7; border-radius: 8px; padding: 18px; margin-bottom: 24px; font-size: 14px; line-height: 1.6; color: #cbd5e1; }" +
-                "  .card { background-color: #1e2235; border: 1px solid #333a52; border-radius: 12px; padding: 20px; margin-bottom: 24px; }" +
-                "  .field { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; }" +
-                "  .label { color: #94a3b8; font-weight: 600; }" +
-                "  .val { color: #f8fafc; font-weight: 700; text-align: right; }" +
-                "  .qr-section { text-align: center; background-color: #0b0d14; border: 2px dashed #6366f1; border-radius: 16px; padding: 24px; margin-bottom: 24px; }" +
-                "  .qr-code-img { border-radius: 12px; border: 4px solid #ffffff; background: #ffffff; padding: 6px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); }" +
-                "  .pass-token { font-family: monospace; font-size: 14px; font-weight: 700; color: #a855f7; letter-spacing: 1px; margin-top: 12px; }" +
-                "  .footer { padding: 20px 24px; background-color: #0d0e15; border-top: 1px solid #232738; text-align: center; font-size: 12px; color: #64748b; line-height: 1.5; }" +
-                "</style>" +
-                "</head>" +
-                "<body>" +
-                "  <div class='container'>" +
-                "    <div class='header'>" +
-                "      <div class='badge'>🎲 VIP Board Gamer Pass Confirmed</div>" +
-                "      <h1 class='title'>Holy Meeples, " + recipientName + "! You're In! 🎉</h1>" +
-                "    </div>" +
-                "    <div class='body'>" +
-                "      <div class='quirky-box'>" +
-                "        <strong>Prepare your victory dance! 💃🕺</strong><br/>" +
-                "        We are downright stoked that you're joining the <strong>Social Shuffle Pune</strong> tribe. " +
-                "        Whether you're looking to trade sheep for wheat in Catan, bluff your closest friends into oblivion during Avalon, " +
-                "        or just soak up good vibes over cold brews and board games, a table is officially reserved for you." +
-                "        <br/><br/>" +
-                "        <em>⚠️ Mild Warning: Side effects may include uncontrolled giggles, sudden cravings for 20 new board games, and making life-long friends in Pune!</em>" +
-                "      </div>" +
-                "      <div class='card'>" +
-                "        <h3 style='margin-top: 0; margin-bottom: 14px; font-size: 15px; color: #a855f7;'>📍 Event Breakdown</h3>" +
-                "        <div class='field'><span class='label'>Meetup:</span><span class='val'>" + eventTitle + "</span></div>" +
-                "        <div class='field'><span class='label'>When:</span><span class='val'>" + eventTime + "</span></div>" +
-                "        <div class='field'><span class='label'>Where:</span><span class='val'>" + eventVenue + " (" + eventAddress + ")</span></div>" +
-                "        <div class='field'><span class='label'>Seats Reserved (PAX):</span><span class='val'>" + pax + " Shuffler(s)</span></div>" +
-                guestListHtml +
-                "        <div class='field'><span class='label'>Payment Status:</span><span class='val' style='color: #4ade80;'>" + registration.getPaymentStatus() + (registration.getRazorpayPaymentId() != null ? " (Paid via Razorpay: " + registration.getRazorpayPaymentId() + ")" : "") + "</span></div>" +
-                "        <div class='field'><span class='label'>Registration ID:</span><span class='val' style='font-family: monospace;'>" + registration.getId() + "</span></div>" +
-                "      </div>" +
-                "      <div class='qr-section'>" +
-                "        <h4 style='margin: 0 0 6px 0; color: #ffffff; font-size: 15px;'>📱 Your Digital Check-in Pass</h4>" +
-                "        <p style='margin: 0 0 16px 0; font-size: 12px; color: #94a3b8;'>Flash this QR code at the door or let our host scan it on the iPad for instant check-in!</p>" +
-                "        <img src='" + qrImageUrl + "' alt='Registration Check-in QR' width='200' height='200' class='qr-code-img' />" +
-                "        <div class='pass-token'>" + qrToken + "</div>" +
-                "      </div>" +
-                "      <div style='font-size: 13px; color: #94a3b8; text-align: center;'>" +
-                "        Questions, panic, or game requests? Reply right here or ping Parimal / Diksha (+91 92849 83072) on WhatsApp!<br/>" +
-                "        See you at the tables! 🚀" +
-                "      </div>" +
-                "    </div>" +
-                "    <div class='footer'>" +
-                "      Social Shuffle Pune Community • Connecting board game enthusiasts across KP, Baner, Viman Nagar & beyond.<br/>" +
-                "      Made with ❤️, dice rolls, and zero boring evenings." +
-                "    </div>" +
-                "  </div>" +
-                "</body>" +
-                "</html>";
+        return "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>"
+                + "body{margin:0;padding:0;background:#0f111a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0}"
+                + ".container{max-width:600px;margin:24px auto;background:#161824;border:1px solid #2d3748;border-radius:16px;overflow:hidden}"
+                + ".header{background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:32px 24px;text-align:center;color:#fff}"
+                + ".body{padding:28px}.card{background:#1e2235;border:1px solid #333a52;border-radius:12px;padding:18px;margin-bottom:20px}"
+                + ".field{display:flex;justify-content:space-between;margin-bottom:10px;font-size:13px}"
+                + ".label{color:#94a3b8;font-weight:600}.val{color:#f8fafc;font-weight:700;text-align:right}"
+                + ".qr{text-align:center;background:#0b0d14;border:2px dashed #6366f1;border-radius:16px;padding:24px}"
+                + "</style></head><body><div class='container'>"
+                + "<div class='header'><h1 style='margin:0;font-size:24px;font-weight:900'>Holy Meeples, " + recipientName + "! You're In!</h1></div>"
+                + "<div class='body'><div class='card'>"
+                + "<div class='field'><span class='label'>Meetup:</span><span class='val'>" + eventTitle + "</span></div>"
+                + "<div class='field'><span class='label'>When:</span><span class='val'>" + eventTime + "</span></div>"
+                + "<div class='field'><span class='label'>Where:</span><span class='val'>" + eventVenue + " (" + eventAddress + ")</span></div>"
+                + "<div class='field'><span class='label'>Seats (PAX):</span><span class='val'>" + pax + " Shuffler(s)</span></div>"
+                + guestListHtml
+                + "<div class='field'><span class='label'>Payment:</span><span class='val' style='color:#4ade80'>" + escapeHtml(registration.getPaymentStatus()) + "</span></div>"
+                + "<div class='field'><span class='label'>Registration ID:</span><span class='val' style='font-family:monospace'>" + escapeHtml(registration.getId()) + "</span></div>"
+                + "</div><div class='qr'><h4 style='margin:0 0 10px 0;color:#fff'>Digital Check-in Pass</h4>"
+                + "<img src='" + qrImageUrl + "' width='200' height='200' style='border-radius:10px;background:#fff;padding:6px' />"
+                + "<div style='font-family:monospace;color:#a855f7;font-weight:700;margin-top:10px'>" + escapeHtml(qrToken) + "</div>"
+                + "</div></div></div></body></html>";
     }
 
-    /**
-     * Builds upcoming event reminder email HTML.
-     */
     public String generateUpcomingEventReminderEmailHtml(Registration registration, ShuffleEvent event, String customNote) {
-        String recipientName = registration.getParticipantName() != null ? registration.getParticipantName() : "Fellow Shuffler";
-        String eventTitle = event != null && event.getTitle() != null ? event.getTitle() : "Upcoming Pune Board Game Meetup";
-        String eventVenue = event != null && event.getVenue() != null ? event.getVenue() : "Pune Venue";
-        String eventAddress = event != null && event.getAddress() != null ? event.getAddress() : "Pune, Maharashtra";
-        String eventTime = event != null && event.getTime() != null ? event.getTime() : "Check app schedule";
-        int pax = registration.getPaxCount() > 0 ? registration.getPaxCount() : 1;
+        String recipientName = escapeHtml(registration.getParticipantName() != null ? registration.getParticipantName() : "Fellow Shuffler");
+        String eventTitle = escapeHtml(event != null && event.getTitle() != null ? event.getTitle() : "Upcoming Pune Board Game Meetup");
+        String eventVenue = escapeHtml(event != null && event.getVenue() != null ? event.getVenue() : "Pune Venue");
+        String eventTime = escapeHtml(event != null && event.getTime() != null ? event.getTime() : "Check app schedule");
         String qrToken = registration.getQrCodeToken() != null ? registration.getQrCodeToken() : ("SS-REG-" + registration.getId());
         String qrImageUrl = "https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=" + URLEncoder.encode(qrToken, StandardCharsets.UTF_8);
 
-        String noteSection = "";
-        if (customNote != null && !customNote.trim().isEmpty()) {
-            noteSection = "<div style='background: rgba(255, 96, 54, 0.12); border-left: 4px solid #FF6036; border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 14px; color: #fed7aa;'>" +
-                    "<strong>📣 Host Notice:</strong><br/>" + customNote.trim() + "</div>";
-        }
-
-        return "<!DOCTYPE html>" +
-                "<html><head><meta charset='UTF-8'>" +
-                "<style>" +
-                "  body { margin: 0; padding: 0; background-color: #080D1F; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #e2e8f0; }" +
-                "  .container { max-width: 600px; margin: 20px auto; background-color: #0E162B; border: 1px solid #1F305E; border-radius: 16px; overflow: hidden; }" +
-                "  .header { background: linear-gradient(135deg, #FF6036 0%, #D946EF 100%); padding: 30px 24px; text-align: center; color: #ffffff; }" +
-                "  .badge { display: inline-block; background-color: #ffffff; color: #080D1F; font-weight: 800; font-size: 11px; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; margin-bottom: 10px; }" +
-                "  .content { padding: 28px 24px; }" +
-                "  .card { background-color: #131E3A; border: 1px solid #1F305E; border-radius: 12px; padding: 18px; margin-bottom: 20px; }" +
-                "  .field { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }" +
-                "  .label { color: #94a3b8; font-weight: 600; }" +
-                "  .val { color: #ffffff; font-weight: 700; }" +
-                "  .footer { padding: 20px; text-align: center; font-size: 12px; color: #64748b; background-color: #070B17; border-top: 1px solid #1F305E; }" +
-                "</style></head><body>" +
-                "<div class='container'>" +
-                "  <div class='header'>" +
-                "    <div class='badge'>⏳ Event Countdown Reminder</div>" +
-                "    <h1 style='margin:0; font-size:24px; font-weight:900;'>Get Ready, " + recipientName + "!</h1>" +
-                "    <p style='margin: 8px 0 0 0; opacity: 0.95; font-size: 14px;'>" + eventTitle + " is right around the corner!</p>" +
-                "  </div>" +
-                "  <div class='content'>" +
-                noteSection +
-                "    <p style='font-size: 14px; line-height: 1.6; color: #cbd5e1; margin-top: 0;'>" +
-                "      The board games are packed, cafe tables are reserved, and hosts are prepping rule guides! " +
-                "      Here is a quick refresher of your meetup details so your arrival is totally seamless." +
-                "    </p>" +
-                "    <div class='card'>" +
-                "      <div class='field'><span class='label'>Meetup:</span><span class='val'>" + eventTitle + "</span></div>" +
-                "      <div class='field'><span class='label'>Date & Time:</span><span class='val' style='color:#FFC226;'>" + eventTime + "</span></div>" +
-                "      <div class='field'><span class='label'>Venue:</span><span class='val'>" + eventVenue + "</span></div>" +
-                "      <div class='field'><span class='label'>Address:</span><span class='val' style='font-size:12px; max-width:280px; text-align:right;'>" + eventAddress + "</span></div>" +
-                "      <div class='field'><span class='label'>Reserved Seats:</span><span class='val'>" + pax + " Shuffler(s)</span></div>" +
-                "    </div>" +
-                "    <div style='text-align: center; background: #070B17; border: 2px dashed #FF6036; border-radius: 14px; padding: 20px; margin-bottom: 20px;'>" +
-                "      <h4 style='margin:0 0 6px 0; color:#fff; font-size:14px;'>📲 Door Check-in QR Pass</h4>" +
-                "      <p style='margin:0 0 12px 0; font-size:11px; color:#94a3b8;'>Show this directly from your phone at entry</p>" +
-                "      <img src='" + qrImageUrl + "' width='180' height='180' style='border-radius:8px; border:3px solid #fff; background:#fff;' />" +
-                "      <div style='font-family: monospace; font-size: 13px; color: #FF6036; margin-top: 8px; font-weight: bold;'>" + qrToken + "</div>" +
-                "    </div>" +
-                "    <div style='background: #111B35; border-radius: 10px; padding: 14px; font-size: 12px; color: #94a3b8; line-height: 1.5;'>" +
-                "      💡 <strong>Pro Tips:</strong> Arrive 10 minutes early to grab your preferred drink and choose your opening table. First-timer? Our hosts guide rules from scratch!" +
-                "    </div>" +
-                "  </div>" +
-                "  <div class='footer'>Social Shuffle Pune • Have questions? Reply to this email or ping us on WhatsApp!</div>" +
-                "</div></body></html>";
+        return "<!DOCTYPE html><html><body style='margin:0;padding:0;background:#080D1F;font-family:sans-serif;color:#e2e8f0'>"
+                + "<div style='max-width:600px;margin:20px auto;background:#0E162B;border:1px solid #1F305E;border-radius:16px;overflow:hidden'>"
+                + "<div style='background:linear-gradient(135deg,#FF6036,#D946EF);padding:28px 24px;text-align:center;color:#fff'>"
+                + "<h1 style='margin:0;font-size:24px'>Get Ready, " + recipientName + "!</h1><p style='margin:6px 0 0'>" + eventTitle + "</p></div>"
+                + "<div style='padding:24px'>"
+                + (customNote != null && !customNote.trim().isEmpty() ? "<p style='background:rgba(255,96,54,0.12);border-left:4px solid #FF6036;padding:12px;border-radius:6px'>" + escapeHtml(customNote) + "</p>" : "")
+                + "<p><strong>Venue:</strong> " + eventVenue + "<br/><strong>Time:</strong> " + eventTime + "</p>"
+                + "<div style='text-align:center;padding:16px;background:#070B17;border:2px dashed #FF6036;border-radius:12px'>"
+                + "<img src='" + qrImageUrl + "' width='180' height='180' style='background:#fff;border-radius:8px' />"
+                + "<div style='font-family:monospace;color:#FF6036;margin-top:8px'>" + escapeHtml(qrToken) + "</div></div></div></div></body></html>";
     }
 
-    /**
-     * Builds custom organizer event broadcast email HTML.
-     */
     public String generateEventBroadcastEmailHtml(Registration registration, ShuffleEvent event, String subject, String message, boolean includeQrPass) {
-        String recipientName = registration.getParticipantName() != null ? registration.getParticipantName() : "Fellow Shuffler";
-        String eventTitle = event != null && event.getTitle() != null ? event.getTitle() : "Social Shuffle Meetup";
-        String eventVenue = event != null && event.getVenue() != null ? event.getVenue() : "Pune Venue";
-        String eventTime = event != null && event.getTime() != null ? event.getTime() : "Event Date";
+        String recipientName = escapeHtml(registration.getParticipantName() != null ? registration.getParticipantName() : "Fellow Shuffler");
+        String eventTitle = escapeHtml(event != null && event.getTitle() != null ? event.getTitle() : "Social Shuffle Meetup");
+        String eventVenue = escapeHtml(event != null && event.getVenue() != null ? event.getVenue() : "Pune Venue");
+        String eventTime = escapeHtml(event != null && event.getTime() != null ? event.getTime() : "Event Date");
         int pax = registration.getPaxCount() > 0 ? registration.getPaxCount() : 1;
         String qrToken = registration.getQrCodeToken() != null ? registration.getQrCodeToken() : ("SS-REG-" + registration.getId());
         String qrImageUrl = "https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=" + URLEncoder.encode(qrToken, StandardCharsets.UTF_8);
 
-        // Replace placeholders in message
-        String parsedMessage = message != null ? message : "";
-        parsedMessage = parsedMessage.replace("{name}", recipientName);
-        parsedMessage = parsedMessage.replace("{event_title}", eventTitle);
-        parsedMessage = parsedMessage.replace("{event_venue}", eventVenue);
-        parsedMessage = parsedMessage.replace("{event_time}", eventTime);
-        parsedMessage = parsedMessage.replace("{pax_count}", String.valueOf(pax));
-        parsedMessage = parsedMessage.replace("{qr_code}", qrToken);
-        parsedMessage = parsedMessage.replace("\n", "<br/>");
+        String parsedMessage = escapeHtml(message != null ? message : "")
+                .replace("{name}", recipientName)
+                .replace("{event_title}", eventTitle)
+                .replace("{event_venue}", eventVenue)
+                .replace("{event_time}", eventTime)
+                .replace("{pax_count}", String.valueOf(pax))
+                .replace("{qr_code}", escapeHtml(qrToken))
+                .replace("\n", "<br/>");
 
-        String qrBlock = "";
-        if (includeQrPass) {
-            qrBlock = "<div style='text-align: center; background: #070B17; border: 2px dashed #35C8A8; border-radius: 14px; padding: 18px; margin: 20px 0;'>" +
-                    "  <h4 style='margin:0 0 6px 0; color:#fff; font-size:14px;'>🎟️ Your Digital Check-in Pass</h4>" +
-                    "  <img src='" + qrImageUrl + "' width='160' height='160' style='border-radius:8px; border:3px solid #fff; background:#fff;' />" +
-                    "  <div style='font-family: monospace; font-size: 13px; color: #35C8A8; margin-top: 8px; font-weight: bold;'>" + qrToken + "</div>" +
-                    "</div>";
-        }
+        String qrBlock = includeQrPass
+                ? "<div style='text-align:center;padding:16px;margin-top:16px;background:#070B17;border:2px dashed #35C8A8;border-radius:12px'><img src='" + qrImageUrl + "' width='160' height='160' style='background:#fff;border-radius:8px'/><div style='font-family:monospace;color:#35C8A8;margin-top:8px'>" + escapeHtml(qrToken) + "</div></div>"
+                : "";
 
-        return "<!DOCTYPE html>" +
-                "<html><head><meta charset='UTF-8'>" +
-                "<style>" +
-                "  body { margin: 0; padding: 0; background-color: #080D1F; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #e2e8f0; }" +
-                "  .container { max-width: 600px; margin: 20px auto; background-color: #0E162B; border: 1px solid #1F305E; border-radius: 16px; overflow: hidden; }" +
-                "  .header { background: linear-gradient(135deg, #1E1B4B 0%, #312E81 50%, #4338CA 100%); padding: 30px 24px; text-align: center; color: #ffffff; }" +
-                "  .content { padding: 28px 24px; }" +
-                "  .msg-box { background: rgba(53, 200, 168, 0.08); border-left: 4px solid #35C8A8; border-radius: 8px; padding: 18px; margin: 16px 0; font-size: 14px; line-height: 1.6; color: #e2e8f0; }" +
-                "  .footer { padding: 18px; text-align: center; font-size: 12px; color: #64748b; background-color: #070B17; border-top: 1px solid #1F305E; }" +
-                "</style></head><body>" +
-                "<div class='container'>" +
-                "  <div class='header'>" +
-                "    <div style='font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #35C8A8; font-weight: bold; margin-bottom: 6px;'>📣 Organizer Push Notification</div>" +
-                "    <h1 style='margin:0; font-size:22px; font-weight:900;'>" + subject + "</h1>" +
-                "    <p style='margin: 6px 0 0 0; opacity: 0.85; font-size: 13px;'>" + eventTitle + " • " + eventVenue + "</p>" +
-                "  </div>" +
-                "  <div class='content'>" +
-                "    <p style='font-size: 14px; margin-top: 0;'>Hello <strong>" + recipientName + "</strong>,</p>" +
-                "    <div class='msg-box'>" + parsedMessage + "</div>" +
-                qrBlock +
-                "    <div style='font-size: 12px; color: #94a3b8; text-align: center; margin-top: 20px;'>" +
-                "      This message was manually triggered by the Social Shuffle Event Host for registered participants." +
-                "    </div>" +
-                "  </div>" +
-                "  <div class='footer'>Social Shuffle Pune • Board Games & Social Community</div>" +
-                "</div></body></html>";
+        return "<!DOCTYPE html><html><body style='margin:0;padding:0;background:#080D1F;font-family:sans-serif;color:#e2e8f0'>"
+                + "<div style='max-width:600px;margin:20px auto;background:#0E162B;border:1px solid #1F305E;border-radius:16px;overflow:hidden'>"
+                + "<div style='background:linear-gradient(135deg,#1E1B4B,#4338CA);padding:28px 24px;text-align:center;color:#fff'>"
+                + "<h1 style='margin:0;font-size:22px'>" + escapeHtml(subject) + "</h1><p style='margin:6px 0 0'>" + eventTitle + " • " + eventVenue + "</p></div>"
+                + "<div style='padding:24px'><p>Hello <strong>" + recipientName + "</strong>,</p><div style='background:#131E3A;border-left:4px solid #35C8A8;padding:16px;border-radius:8px'>" + parsedMessage + "</div>"
+                + qrBlock + "</div></div></body></html>";
     }
 
-    /**
-     * Builds community announcement email HTML.
-     */
     public String generateCommunityAnnouncementEmailHtml(String recipientName, String title, String message) {
-        return "<!DOCTYPE html>" +
-                "<html><head><meta charset='UTF-8'>" +
-                "<style>" +
-                "  body { margin: 0; padding: 0; background-color: #080D1F; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #e2e8f0; }" +
-                "  .container { max-width: 600px; margin: 20px auto; background-color: #0E162B; border: 1px solid #1F305E; border-radius: 16px; overflow: hidden; }" +
-                "  .header { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); padding: 30px 24px; text-align: center; color: #ffffff; }" +
-                "  .content { padding: 28px 24px; font-size: 14px; line-height: 1.6; color: #cbd5e1; }" +
-                "  .footer { padding: 18px; text-align: center; font-size: 12px; color: #64748b; background-color: #070B17; border-top: 1px solid #1F305E; }" +
-                "</style></head><body>" +
-                "<div class='container'>" +
-                "  <div class='header'>" +
-                "    <div style='font-size: 11px; text-transform: uppercase; color: #7dd3fc; font-weight: bold; margin-bottom: 6px;'>📢 Pune Community Announcement</div>" +
-                "    <h1 style='margin:0; font-size:22px; font-weight:900;'>" + title + "</h1>" +
-                "  </div>" +
-                "  <div class='content'>" +
-                "    <p>Hey <strong>" + (recipientName != null ? recipientName : "Shuffler") + "</strong>,</p>" +
-                "    <div style='background: #131E3A; border-left: 4px solid #38bdf8; border-radius: 8px; padding: 18px; margin: 16px 0; color: #f1f5f9;'>" +
-                message.replace("\n", "<br/>") +
-                "    </div>" +
-                "    <p>Check out our upcoming schedule or chat with fellow gamers in our WhatsApp group!</p>" +
-                "  </div>" +
-                "  <div class='footer'>Social Shuffle Pune • Connecting tabletop lovers across the city</div>" +
-                "</div></body></html>";
+        return "<!DOCTYPE html><html><body style='margin:0;padding:0;background:#080D1F;font-family:sans-serif;color:#e2e8f0'>"
+                + "<div style='max-width:600px;margin:20px auto;background:#0E162B;border:1px solid #1F305E;border-radius:16px;overflow:hidden'>"
+                + "<div style='background:linear-gradient(135deg,#0284c7,#0369a1);padding:28px 24px;text-align:center;color:#fff'>"
+                + "<h1 style='margin:0;font-size:22px'>" + escapeHtml(title) + "</h1></div>"
+                + "<div style='padding:24px'><p>Hey <strong>" + escapeHtml(nonEmpty(recipientName, "Shuffler")) + "</strong>,</p>"
+                + "<div style='background:#131E3A;border-left:4px solid #38bdf8;padding:16px;border-radius:8px'>" + escapeHtml(message != null ? message : "").replace("\n", "<br/>") + "</div>"
+                + "</div></div></body></html>";
     }
 
-    /**
-     * Dispatches the confirmation email with the scannable ticket QR code.
-     */
-    public boolean sendRegistrationConfirmationEmail(Registration registration, ShuffleEvent event) {
-        try {
-            String qrToken = registration.getQrCodeToken() != null ? registration.getQrCodeToken() : ("SS-REG-" + registration.getId());
-            registration.setQrCodeToken(qrToken);
-            registration.setQrCodeUrl("https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=" + qrToken);
-            registration.setEmailSent(true);
-            registration.setEmailSentAt(Instant.now().toString());
-
-            String emailHtml = generateQuirkyRegistrationEmailHtml(registration, event);
-
-            logger.info("📧 [CONFIRMATION EMAIL DISPATCHED] To: {} <{}>, Subject: 🎲 Registration Pass: {}",
-                    registration.getParticipantName(), registration.getParticipantEmail(), event != null ? event.getTitle() : "Social Shuffle");
-
-            return true;
-        } catch (Exception e) {
-            logger.error("Failed to generate/send confirmation email for registration: {}", registration.getId(), e);
-            return false;
-        }
+    private String resolveFromAddress(Map<String, Object> cfg) {
+        String from = str(cfg.get("smtpFrom"));
+        if (!from.isEmpty()) return from;
+        String user = str(cfg.get("smtpUser"));
+        if (!user.isEmpty()) return user;
+        String gmail = str(cfg.get("gmailEmail"));
+        return !gmail.isEmpty() ? gmail : "noreply@socialshufflepune.com";
     }
 
-    /**
-     * Dispatches upcoming event reminder email to a single attendee.
-     */
-    public boolean sendEventReminderEmail(Registration registration, ShuffleEvent event, String customNote) {
-        try {
-            String emailHtml = generateUpcomingEventReminderEmailHtml(registration, event, customNote);
-            logger.info("⏳ [REMINDER EMAIL DISPATCHED] To: {} <{}> for Event: {}",
-                    registration.getParticipantName(), registration.getParticipantEmail(), event != null ? event.getTitle() : "");
-            return true;
-        } catch (Exception e) {
-            logger.error("Failed to dispatch reminder email for registration: {}", registration.getId(), e);
-            return false;
-        }
+    private String resolveAdminEmail() {
+        Map<String, Object> cfg = appConfigService.getCommunicationsConfig();
+        return nonEmpty(str(cfg.get("adminNotificationEmail")), "parimalmshete@gmail.com");
     }
 
-    /**
-     * Dispatches custom event broadcast email to a single attendee.
-     */
-    public boolean sendEventBroadcastEmail(Registration registration, ShuffleEvent event, String subject, String message, boolean includeQrPass) {
-        try {
-            String emailHtml = generateEventBroadcastEmailHtml(registration, event, subject, message, includeQrPass);
-            logger.info("📢 [EVENT BROADCAST EMAIL DISPATCHED] To: {} <{}>, Subject: {}",
-                    registration.getParticipantName(), registration.getParticipantEmail(), subject);
-            return true;
-        } catch (Exception e) {
-            logger.error("Failed to dispatch event broadcast email for registration: {}", registration.getId(), e);
-            return false;
-        }
+    private String escapeHtml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
-    /**
-     * Dispatches community announcement email.
-     */
-    public boolean sendCommunityAnnouncementEmail(String email, String name, String title, String message) {
-        try {
-            String emailHtml = generateCommunityAnnouncementEmailHtml(name, title, message);
-            logger.info("📣 [COMMUNITY ANNOUNCEMENT DISPATCHED] To: {} <{}>, Title: {}", name, email, title);
-            return true;
-        } catch (Exception e) {
-            logger.error("Failed to dispatch community announcement email to: {}", email, e);
-            return false;
-        }
+    private String stripHtml(String html) {
+        return html == null ? "" : html.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
+    }
+
+    private String nonEmpty(String val, String fallback) {
+        return (val != null && !val.trim().isEmpty()) ? val.trim() : fallback;
+    }
+
+    private String str(Object obj) {
+        return obj == null ? "" : String.valueOf(obj).trim();
     }
 }

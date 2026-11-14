@@ -1,5 +1,6 @@
 package com.socialshuffle.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.socialshuffle.converter.StringListConverter;
 import jakarta.persistence.*;
 import java.io.Serializable;
@@ -30,6 +31,7 @@ public class Participant implements Serializable {
     @Column(name = "phone", length = 50)
     private String phone;
 
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "password")
     private String password;
 
@@ -70,6 +72,18 @@ public class Participant implements Serializable {
 
     @Column(name = "last_attended_event_title")
     private String lastAttendedEventTitle;
+
+    @Column(name = "auth_provider", length = 30)
+    private String authProvider = "local";
+
+    @Column(name = "registered_at", length = 50)
+    private String registeredAt;
+
+    @Column(name = "created_at", length = 50)
+    private String createdAt;
+
+    @Column(name = "updated_at", length = 50)
+    private String updatedAt;
 
     public Participant() {
     }
@@ -217,6 +231,38 @@ public class Participant implements Serializable {
 
     public void setUsername(String username) {
         this.username = username;
+    }
+
+    public String getAuthProvider() {
+        return authProvider;
+    }
+
+    public void setAuthProvider(String authProvider) {
+        this.authProvider = authProvider;
+    }
+
+    public String getRegisteredAt() {
+        return registeredAt;
+    }
+
+    public void setRegisteredAt(String registeredAt) {
+        this.registeredAt = registeredAt;
+    }
+
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(String createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(String updatedAt) {
+        this.updatedAt = updatedAt;
     }
 
     @Override

@@ -11,5 +11,7 @@ public interface VolunteerApplicationRepository extends JpaRepository<VolunteerA
 
     List<VolunteerApplication> findByStatusIgnoreCase(String status);
 
+    List<VolunteerApplication> findByEmailIgnoreCaseOrderBySubmittedAtDesc(String email);
+
     List<VolunteerApplication> findAllByOrderBySubmittedAtDesc();
 }

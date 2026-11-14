@@ -1,5 +1,6 @@
 package com.socialshuffle.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.io.Serializable;
 import java.util.Objects;
@@ -26,6 +27,7 @@ public class AdminAccount implements Serializable {
     @Column(name = "phone", length = 50)
     private String phone;
 
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "password", nullable = false)
     private String password;
 
@@ -40,6 +42,9 @@ public class AdminAccount implements Serializable {
 
     @Column(name = "bio", columnDefinition = "TEXT")
     private String bio;
+
+    @Column(name = "area")
+    private String area = "Koregaon Park, Pune";
 
     @Column(name = "active", nullable = false)
     private boolean active = true;
@@ -140,6 +145,14 @@ public class AdminAccount implements Serializable {
 
     public void setBio(String bio) {
         this.bio = bio;
+    }
+
+    public String getArea() {
+        return area;
+    }
+
+    public void setArea(String area) {
+        this.area = area;
     }
 
     public boolean isActive() {

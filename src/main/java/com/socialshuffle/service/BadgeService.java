@@ -28,6 +28,8 @@ public class BadgeService {
     private final GameRepository gameRepository;
     private final BadgeLevelRepository badgeLevelRepository;
 
+    private volatile List<BadgeLevelDefinition> cachedLevels = null;
+
     public BadgeService(ParticipantRepository participantRepository,
                         GameRepository gameRepository,
                         BadgeLevelRepository badgeLevelRepository) {
@@ -114,15 +116,21 @@ public class BadgeService {
     }
 
     /**
-     * Retrieves all badge level definitions directly from database table `badge_levels`.
+     * Retrieves all badge level definitions directly from database table `badge_levels` (cached in memory).
      */
     public List<BadgeLevelDefinition> getAllLevels() {
+        List<BadgeLevelDefinition> snapshot = cachedLevels;
+        if (snapshot != null && !snapshot.isEmpty()) {
+            return snapshot;
+        }
         List<BadgeLevel> entities = badgeLevelRepository.findAllByOrderByLevelAsc();
         if (entities.isEmpty()) {
             initBadgeLevelsIfEmpty();
             entities = badgeLevelRepository.findAllByOrderByLevelAsc();
         }
-        return entities.stream().map(this::toDto).collect(Collectors.toList());
+        snapshot = entities.stream().map(this::toDto).collect(Collectors.toList());
+        cachedLevels = snapshot;
+        return snapshot;
     }
 
     private BadgeLevelDefinition toDto(BadgeLevel entity) {

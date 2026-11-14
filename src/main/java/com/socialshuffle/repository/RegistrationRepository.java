@@ -18,6 +18,10 @@ public interface RegistrationRepository extends JpaRepository<Registration, Stri
 
     List<Registration> findByParticipantId(String participantId);
 
+    List<Registration> findByParticipantEmailIgnoreCase(String participantEmail);
+
+    List<Registration> findByParticipantIdOrParticipantEmailIgnoreCase(String participantId, String participantEmail);
+
     Optional<Registration> findByEventIdAndParticipantId(String eventId, String participantId);
 
     List<Registration> findByEventIdAndAttendanceStatus(String eventId, String attendanceStatus);
@@ -27,6 +31,12 @@ public interface RegistrationRepository extends JpaRepository<Registration, Stri
     long countByEventId(String eventId);
 
     long countByEventIdAndAttendanceStatus(String eventId, String attendanceStatus);
+
+    @Query("SELECT COALESCE(SUM(r.paxCount), 0) FROM Registration r WHERE r.eventId = :eventId AND LOWER(COALESCE(r.attendanceStatus, '')) <> 'cancelled'")
+    int sumActivePaxByEventId(@Param("eventId") String eventId);
+
+    @Query("SELECT COALESCE(SUM(r.paxCount), 0) FROM Registration r WHERE r.eventId = :eventId AND LOWER(COALESCE(r.attendanceStatus, '')) = 'checked in'")
+    int sumCheckedInPaxByEventId(@Param("eventId") String eventId);
 
     Optional<Registration> findByQrCodeTokenIgnoreCase(String qrCodeToken);
 
@@ -43,7 +53,7 @@ public interface RegistrationRepository extends JpaRepository<Registration, Stri
 
     @Transactional
     @Modifying
-    @Query("UPDATE Registration r SET r.attendanceStatus = :status, r.checkInTime = :checkInTime WHERE r.id = :id")
+    @Query("UPDATE Registration r SET r.attendanceStatus = :status, r.checkInTime = :checkInTime, r.checkedInAt = :checkInTime WHERE r.id = :id")
     int updateAttendanceFast(@Param("id") String id, @Param("status") String status, @Param("checkInTime") String checkInTime);
 
     @Transactional

@@ -8,6 +8,7 @@ public class AuthResponse implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    private boolean success = true;
     private String token;
     private User user;
     private Participant participant;
@@ -17,10 +18,19 @@ public class AuthResponse implements Serializable {
     }
 
     public AuthResponse(String token, User user, Participant participant, String message) {
+        this.success = true;
         this.token = token;
         this.user = user;
         this.participant = participant;
         this.message = message;
+    }
+
+    public boolean isSuccess() {
+        return success;
+    }
+
+    public void setSuccess(boolean success) {
+        this.success = success;
     }
 
     public String getToken() {
