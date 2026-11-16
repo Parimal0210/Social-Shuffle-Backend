@@ -107,7 +107,7 @@ public class EmailNotificationService {
         }
 
         if (errors.isEmpty()) {
-            String errMsg = "Email transport is not configured. Please set SMTP_USER / SMTP_PASS or connect Gmail / Resend in Admin -> Communications Settings.";
+            String errMsg = "SMTP password (SMTP_PASS) for socialshuffle.pune@gmail.com is not configured yet. Please set SMTP_PASS or add the Gmail App Password / Connect Gmail in Admin -> Mail & OTP Settings.";
             logger.warn("[Mail] {}", errMsg);
             return new EmailDeliveryResult(false, "none", null, errMsg);
         }

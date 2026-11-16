@@ -31,13 +31,13 @@ public class AppConfigService {
     @Value("${app.mail.port:587}")
     private int envSmtpPort;
 
-    @Value("${app.mail.username:}")
+    @Value("${app.mail.username:socialshuffle.pune@gmail.com}")
     private String envSmtpUser;
 
     @Value("${app.mail.password:}")
     private String envSmtpPass;
 
-    @Value("${app.mail.from:}")
+    @Value("${app.mail.from:socialshuffle.pune@gmail.com}")
     private String envSmtpFrom;
 
     @Value("${app.mail.admin-email:parimalmshete@gmail.com}")
