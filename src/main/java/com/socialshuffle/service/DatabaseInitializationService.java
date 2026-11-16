@@ -296,10 +296,22 @@ public class DatabaseInitializationService implements CommandLineRunner {
             java.util.Map<String, Object> defaults = new java.util.LinkedHashMap<>();
             defaults.put("smtpHost", "smtp.gmail.com");
             defaults.put("smtpPort", 587);
-            defaults.put("smtpUser", "parimalmshete@gmail.com");
-            defaults.put("smtpFrom", "parimalmshete@gmail.com");
+            defaults.put("smtpUser", "socialshuffle.pune@gmail.com");
+            defaults.put("smtpFrom", "socialshuffle.pune@gmail.com");
             defaults.put("adminNotificationEmail", "parimalmshete@gmail.com");
             appConfigService.saveCommunicationsConfig(defaults, "System Init");
+        } else {
+            java.util.Map<String, Object> existing = appConfigService.getCommunicationsConfig();
+            String currentUser = existing.get("smtpUser") != null ? String.valueOf(existing.get("smtpUser")).trim() : "";
+            String currentFrom = existing.get("smtpFrom") != null ? String.valueOf(existing.get("smtpFrom")).trim() : "";
+            if (currentUser.isEmpty() || "parimalmshete@gmail.com".equalsIgnoreCase(currentUser)
+                    || currentFrom.isEmpty() || "parimalmshete@gmail.com".equalsIgnoreCase(currentFrom)
+                    || "noreply@socialshufflepune.com".equalsIgnoreCase(currentFrom)) {
+                java.util.Map<String, Object> updates = new java.util.LinkedHashMap<>();
+                updates.put("smtpUser", "socialshuffle.pune@gmail.com");
+                updates.put("smtpFrom", "socialshuffle.pune@gmail.com");
+                appConfigService.saveCommunicationsConfig(updates, "Sender Email Update");
+            }
         }
         if (!appConfigRepository.existsById(AppConfigService.KEY_RAZORPAY)) {
             appConfigService.saveRazorpayConfig(new java.util.LinkedHashMap<>(), "System Init");

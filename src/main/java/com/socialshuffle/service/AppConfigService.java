@@ -67,9 +67,9 @@ public class AppConfigService {
         Map<String, Object> defaults = new LinkedHashMap<>();
         defaults.put("smtpHost", nonEmpty(envSmtpHost, "smtp.gmail.com"));
         defaults.put("smtpPort", envSmtpPort > 0 ? envSmtpPort : 587);
-        defaults.put("smtpUser", nonEmpty(envSmtpUser, ""));
+        defaults.put("smtpUser", nonEmpty(envSmtpUser, "socialshuffle.pune@gmail.com"));
         defaults.put("smtpPass", nonEmpty(envSmtpPass, ""));
-        defaults.put("smtpFrom", nonEmpty(envSmtpFrom, nonEmpty(envSmtpUser, "noreply@socialshufflepune.com")));
+        defaults.put("smtpFrom", nonEmpty(envSmtpFrom, nonEmpty(envSmtpUser, "socialshuffle.pune@gmail.com")));
         defaults.put("adminNotificationEmail", nonEmpty(envAdminEmail, "parimalmshete@gmail.com"));
         defaults.put("resendApiKey", nonEmpty(envResendApiKey, ""));
         defaults.put("whatsappPhoneId", "");

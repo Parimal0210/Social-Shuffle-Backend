@@ -542,7 +542,7 @@ public class EmailNotificationService {
         String user = str(cfg.get("smtpUser"));
         if (!user.isEmpty()) return user;
         String gmail = str(cfg.get("gmailEmail"));
-        return !gmail.isEmpty() ? gmail : "noreply@socialshufflepune.com";
+        return !gmail.isEmpty() ? gmail : "socialshuffle.pune@gmail.com";
     }
 
     private String resolveAdminEmail() {
