@@ -94,10 +94,7 @@ public class CommunicationsController {
                 ? String.valueOf(body.get("message")).trim()
                 : "SMTP / Email transport test from Social Shuffle Java STS backend succeeded!";
 
-        String html = "<div style='font-family:sans-serif;max-width:560px;margin:20px auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:12px;border:1px solid #334155'>"
-                + "<h2 style='color:#35C8A8;margin-top:0'>" + subject + "</h2>"
-                + "<p>" + message + "</p>"
-                + "</div>";
+        String html = emailNotificationService.generateDiagnosticTestEmailHtml(toEmail, subject, message);
         EmailDeliveryResult res = emailNotificationService.dispatchEmail(toEmail, subject, html, message);
         if (!res.success()) {
             String err = res.error() != null ? res.error() : "Failed to deliver test email";
