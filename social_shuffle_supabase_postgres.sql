@@ -857,7 +857,7 @@ INSERT INTO app_configs (config_key, config_json, updated_at, updated_by)
 VALUES
 (
     'communications_config',
-    '{"smtpHost":"smtp.gmail.com","smtpPort":587,"smtpUser":"socialshuffle.pune@gmail.com","smtpPass":"","smtpFrom":"socialshuffle.pune@gmail.com","adminNotificationEmail":"parimalmshete@gmail.com","resendApiKey":"","whatsappPhoneId":"","whatsappToken":"","gmailConnected":false,"gmailEmail":"","gmailAccessToken":"","gmailExpiresAt":0}',
+    '{"smtpHost":"smtp.gmail.com","smtpPort":587,"smtpUser":"socialshuffle.pune@gmail.com","smtpPass":"","smtpFrom":"socialshuffle.pune@gmail.com","adminNotificationEmail":"socialshuffle.pune@gmail.com","resendApiKey":"","whatsappPhoneId":"","whatsappToken":"","gmailConnected":false,"gmailEmail":"","gmailAccessToken":"","gmailExpiresAt":0}',
     '2026-11-16T00:00:00Z',
     'System Init'
 ),

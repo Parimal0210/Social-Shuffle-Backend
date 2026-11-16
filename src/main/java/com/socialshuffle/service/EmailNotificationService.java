@@ -547,7 +547,7 @@ public class EmailNotificationService {
 
     private String resolveAdminEmail() {
         Map<String, Object> cfg = appConfigService.getCommunicationsConfig();
-        return nonEmpty(str(cfg.get("adminNotificationEmail")), "parimalmshete@gmail.com");
+        return nonEmpty(str(cfg.get("adminNotificationEmail")), "socialshuffle.pune@gmail.com");
     }
 
     private String escapeHtml(String s) {

@@ -298,27 +298,31 @@ public class DatabaseInitializationService implements CommandLineRunner {
             defaults.put("smtpPort", 587);
             defaults.put("smtpUser", "socialshuffle.pune@gmail.com");
             defaults.put("smtpFrom", "socialshuffle.pune@gmail.com");
-            defaults.put("adminNotificationEmail", "parimalmshete@gmail.com");
+            defaults.put("adminNotificationEmail", "socialshuffle.pune@gmail.com");
             appConfigService.saveCommunicationsConfig(defaults, "System Init");
         } else {
             java.util.Map<String, Object> existing = appConfigService.getCommunicationsConfig();
             String currentUser = existing.get("smtpUser") != null ? String.valueOf(existing.get("smtpUser")).trim() : "";
             String currentFrom = existing.get("smtpFrom") != null ? String.valueOf(existing.get("smtpFrom")).trim() : "";
+            String currentAdmin = existing.get("adminNotificationEmail") != null ? String.valueOf(existing.get("adminNotificationEmail")).trim() : "";
             String resolvedPass = existing.get("smtpPass") != null ? String.valueOf(existing.get("smtpPass")).trim() : "";
             String rawStoredJson = appConfigRepository.findById(AppConfigService.KEY_COMMUNICATIONS)
                     .map(com.socialshuffle.model.AppConfig::getConfigJson).orElse("");
             boolean dbNeedsPassSync = !resolvedPass.isEmpty() && (!rawStoredJson.contains("\"smtpPass\"") || rawStoredJson.contains("\"smtpPass\":\"\""));
+            boolean adminNeedsUpdate = currentAdmin.isEmpty() || "parimalmshete@gmail.com".equalsIgnoreCase(currentAdmin);
             if (currentUser.isEmpty() || "parimalmshete@gmail.com".equalsIgnoreCase(currentUser)
                     || currentFrom.isEmpty() || "parimalmshete@gmail.com".equalsIgnoreCase(currentFrom)
                     || "noreply@socialshufflepune.com".equalsIgnoreCase(currentFrom)
+                    || adminNeedsUpdate
                     || dbNeedsPassSync) {
                 java.util.Map<String, Object> updates = new java.util.LinkedHashMap<>();
                 updates.put("smtpUser", "socialshuffle.pune@gmail.com");
                 updates.put("smtpFrom", "socialshuffle.pune@gmail.com");
+                updates.put("adminNotificationEmail", "socialshuffle.pune@gmail.com");
                 if (!resolvedPass.isEmpty()) {
                     updates.put("smtpPass", resolvedPass);
                 }
-                appConfigService.saveCommunicationsConfig(updates, "SMTP Credentials Sync");
+                appConfigService.saveCommunicationsConfig(updates, "SMTP & Admin Email Sync");
             }
         }
         if (!appConfigRepository.existsById(AppConfigService.KEY_RAZORPAY)) {

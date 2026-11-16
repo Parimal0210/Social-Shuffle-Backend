@@ -40,7 +40,7 @@ public class AppConfigService {
     @Value("${app.mail.from:socialshuffle.pune@gmail.com}")
     private String envSmtpFrom;
 
-    @Value("${app.mail.admin-email:parimalmshete@gmail.com}")
+    @Value("${app.mail.admin-email:socialshuffle.pune@gmail.com}")
     private String envAdminEmail;
 
     @Value("${app.mail.resend-api-key:}")
@@ -70,7 +70,7 @@ public class AppConfigService {
         defaults.put("smtpUser", nonEmpty(envSmtpUser, "socialshuffle.pune@gmail.com"));
         defaults.put("smtpPass", nonEmpty(envSmtpPass, ""));
         defaults.put("smtpFrom", nonEmpty(envSmtpFrom, nonEmpty(envSmtpUser, "socialshuffle.pune@gmail.com")));
-        defaults.put("adminNotificationEmail", nonEmpty(envAdminEmail, "parimalmshete@gmail.com"));
+        defaults.put("adminNotificationEmail", nonEmpty(envAdminEmail, "socialshuffle.pune@gmail.com"));
         defaults.put("resendApiKey", nonEmpty(envResendApiKey, ""));
         defaults.put("whatsappPhoneId", "");
         defaults.put("whatsappToken", "");
