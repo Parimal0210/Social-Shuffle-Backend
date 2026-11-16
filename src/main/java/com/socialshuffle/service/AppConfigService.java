@@ -84,7 +84,7 @@ public class AppConfigService {
             try {
                 Map<String, Object> parsed = objectMapper.readValue(stored.get().getConfigJson(), new TypeReference<>() {});
                 for (Map.Entry<String, Object> e : parsed.entrySet()) {
-                    if (e.getValue() != null) {
+                    if (e.getValue() != null && !String.valueOf(e.getValue()).trim().isEmpty()) {
                         defaults.put(e.getKey(), e.getValue());
                     }
                 }

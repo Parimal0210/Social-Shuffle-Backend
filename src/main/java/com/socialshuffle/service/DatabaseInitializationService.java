@@ -304,13 +304,21 @@ public class DatabaseInitializationService implements CommandLineRunner {
             java.util.Map<String, Object> existing = appConfigService.getCommunicationsConfig();
             String currentUser = existing.get("smtpUser") != null ? String.valueOf(existing.get("smtpUser")).trim() : "";
             String currentFrom = existing.get("smtpFrom") != null ? String.valueOf(existing.get("smtpFrom")).trim() : "";
+            String resolvedPass = existing.get("smtpPass") != null ? String.valueOf(existing.get("smtpPass")).trim() : "";
+            String rawStoredJson = appConfigRepository.findById(AppConfigService.KEY_COMMUNICATIONS)
+                    .map(com.socialshuffle.model.AppConfig::getConfigJson).orElse("");
+            boolean dbNeedsPassSync = !resolvedPass.isEmpty() && (!rawStoredJson.contains("\"smtpPass\"") || rawStoredJson.contains("\"smtpPass\":\"\""));
             if (currentUser.isEmpty() || "parimalmshete@gmail.com".equalsIgnoreCase(currentUser)
                     || currentFrom.isEmpty() || "parimalmshete@gmail.com".equalsIgnoreCase(currentFrom)
-                    || "noreply@socialshufflepune.com".equalsIgnoreCase(currentFrom)) {
+                    || "noreply@socialshufflepune.com".equalsIgnoreCase(currentFrom)
+                    || dbNeedsPassSync) {
                 java.util.Map<String, Object> updates = new java.util.LinkedHashMap<>();
                 updates.put("smtpUser", "socialshuffle.pune@gmail.com");
                 updates.put("smtpFrom", "socialshuffle.pune@gmail.com");
-                appConfigService.saveCommunicationsConfig(updates, "Sender Email Update");
+                if (!resolvedPass.isEmpty()) {
+                    updates.put("smtpPass", resolvedPass);
+                }
+                appConfigService.saveCommunicationsConfig(updates, "SMTP Credentials Sync");
             }
         }
         if (!appConfigRepository.existsById(AppConfigService.KEY_RAZORPAY)) {
