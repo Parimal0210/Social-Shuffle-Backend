@@ -33,6 +33,8 @@ public class DatabaseInitializationService implements CommandLineRunner {
     private final CommunityStatsRepository communityStatsRepository;
     private final AuditLogRepository auditLogRepository;
     private final NotificationItemRepository notificationRepository;
+    private final AppConfigRepository appConfigRepository;
+    private final AppConfigService appConfigService;
     private final PasswordSecurityUtil passwordSecurityUtil;
 
     public DatabaseInitializationService(AdminRepository adminRepository,
@@ -45,6 +47,8 @@ public class DatabaseInitializationService implements CommandLineRunner {
                                          CommunityStatsRepository communityStatsRepository,
                                          AuditLogRepository auditLogRepository,
                                          NotificationItemRepository notificationRepository,
+                                         AppConfigRepository appConfigRepository,
+                                         AppConfigService appConfigService,
                                          PasswordSecurityUtil passwordSecurityUtil) {
         this.adminRepository = adminRepository;
         this.userRepository = userRepository;
@@ -56,6 +60,8 @@ public class DatabaseInitializationService implements CommandLineRunner {
         this.communityStatsRepository = communityStatsRepository;
         this.auditLogRepository = auditLogRepository;
         this.notificationRepository = notificationRepository;
+        this.appConfigRepository = appConfigRepository;
+        this.appConfigService = appConfigService;
         this.passwordSecurityUtil = passwordSecurityUtil;
     }
 
@@ -70,6 +76,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
         seedBadgeLevelsIfEmpty();
         seedCommunityStatsIfEmpty();
         seedAuditAndNotificationsIfEmpty();
+        seedAppConfigsIfMissing();
         log.info("Unified PostgreSQL verification completed cleanly.");
     }
 
@@ -281,6 +288,21 @@ public class DatabaseInitializationService implements CommandLineRunner {
             notif.setEventId("evt-35");
             notif.setDeliveryStatus("Sent");
             notificationRepository.save(notif);
+        }
+    }
+
+    private void seedAppConfigsIfMissing() {
+        if (!appConfigRepository.existsById(AppConfigService.KEY_COMMUNICATIONS)) {
+            java.util.Map<String, Object> defaults = new java.util.LinkedHashMap<>();
+            defaults.put("smtpHost", "smtp.gmail.com");
+            defaults.put("smtpPort", 587);
+            defaults.put("smtpUser", "parimalmshete@gmail.com");
+            defaults.put("smtpFrom", "parimalmshete@gmail.com");
+            defaults.put("adminNotificationEmail", "parimalmshete@gmail.com");
+            appConfigService.saveCommunicationsConfig(defaults, "System Init");
+        }
+        if (!appConfigRepository.existsById(AppConfigService.KEY_RAZORPAY)) {
+            appConfigService.saveRazorpayConfig(new java.util.LinkedHashMap<>(), "System Init");
         }
     }
 }
