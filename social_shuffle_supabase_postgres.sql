@@ -852,6 +852,23 @@ VALUES
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- 13. Seed baseline `app_configs` (non-secret defaults; set smtpPass / secrets via Admin -> Mail & OTP Settings or env)
+INSERT INTO app_configs (config_key, config_json, updated_at, updated_by)
+VALUES
+(
+    'communications_config',
+    '{"smtpHost":"smtp.gmail.com","smtpPort":587,"smtpUser":"socialshuffle.pune@gmail.com","smtpPass":"","smtpFrom":"socialshuffle.pune@gmail.com","adminNotificationEmail":"parimalmshete@gmail.com","resendApiKey":"","whatsappPhoneId":"","whatsappToken":"","gmailConnected":false,"gmailEmail":"","gmailAccessToken":"","gmailExpiresAt":0}',
+    '2026-11-16T00:00:00Z',
+    'System Init'
+),
+(
+    'razorpay_config',
+    '{"keyId":"rzp_test_SocialShufflePune","keySecret":"","currency":"INR","enabled":true,"isLive":false,"companyName":"Social Shuffle Pune","themeColor":"#FF751F"}',
+    '2026-11-16T00:00:00Z',
+    'System Init'
+)
+ON CONFLICT (config_key) DO NOTHING;
+
 -- ==============================================================================
 -- End of Social Shuffle PostgreSQL Schema & Seed Script
 -- ==============================================================================
