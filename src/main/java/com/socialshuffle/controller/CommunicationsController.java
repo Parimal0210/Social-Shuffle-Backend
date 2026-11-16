@@ -100,10 +100,12 @@ public class CommunicationsController {
                 + "</div>";
         EmailDeliveryResult res = emailNotificationService.dispatchEmail(toEmail, subject, html, message);
         if (!res.success()) {
-            return ResponseEntity.status(502).body(Map.of(
+            String err = res.error() != null ? res.error() : "Failed to deliver test email";
+            return ResponseEntity.status(422).body(Map.of(
                     "success", false,
                     "provider", res.provider(),
-                    "error", res.error() != null ? res.error() : "Failed to deliver test email"
+                    "error", err,
+                    "message", err
             ));
         }
         return ResponseEntity.ok(Map.of(

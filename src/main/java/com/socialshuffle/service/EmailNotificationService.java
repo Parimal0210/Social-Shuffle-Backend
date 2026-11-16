@@ -155,12 +155,14 @@ public class EmailNotificationService {
         props.put("mail.smtp.connectiontimeout", "6000");
         props.put("mail.smtp.timeout", "8000");
         props.put("mail.smtp.writetimeout", "8000");
+        props.put("mail.smtp.ssl.protocols", "TLSv1.2 TLSv1.3");
+        props.put("mail.smtp.ssl.trust", "*");
         if (port == 465) {
             props.put("mail.smtp.ssl.enable", "true");
             props.put("mail.smtp.starttls.enable", "false");
         } else {
             props.put("mail.smtp.starttls.enable", "true");
-            props.put("mail.smtp.starttls.required", "false");
+            props.put("mail.smtp.starttls.required", "true");
         }
         cachedMailSender = impl;
         lastSenderFingerprint = fingerprint;
@@ -206,10 +208,21 @@ public class EmailNotificationService {
     }
 
     private EmailDeliveryResult sendViaResend(String apiKey, String fromAddr, String to, String subject, String html, String plainText) {
+        String primaryFrom = (fromAddr != null && fromAddr.contains("@") && !fromAddr.equalsIgnoreCase("noreply@socialshufflepune.com"))
+                ? ("Social Shuffle Pune <" + fromAddr + ">")
+                : "Social Shuffle Pune <onboarding@resend.dev>";
+        EmailDeliveryResult first = sendResendHttp(apiKey, primaryFrom, to, subject, html, plainText);
+        if (!first.success() && !primaryFrom.contains("onboarding@resend.dev")
+                && first.error() != null && first.error().contains("403")) {
+            return sendResendHttp(apiKey, "Social Shuffle Pune <onboarding@resend.dev>", to, subject, html, plainText);
+        }
+        return first;
+    }
+
+    private EmailDeliveryResult sendResendHttp(String apiKey, String fromHeader, String to, String subject, String html, String plainText) {
         try {
-            String from = fromAddr.contains("@") ? ("Social Shuffle Pune <" + fromAddr + ">") : "Social Shuffle Pune <onboarding@resend.dev>";
             Map<String, Object> body = new LinkedHashMap<>();
-            body.put("from", from);
+            body.put("from", fromHeader);
             body.put("to", Collections.singletonList(to));
             body.put("subject", subject);
             body.put("html", html);

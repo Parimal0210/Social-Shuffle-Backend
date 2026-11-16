@@ -133,11 +133,11 @@ public class AuthController {
         EmailDeliveryResult emailResult = emailNotificationService.sendOtpEmailSync(rawEmail, name, otp);
         if (!emailResult.success()) {
             otpRepository.deleteByEmailIgnoreCase(rawEmail);
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(Map.of(
                     "success", false,
                     "provider", emailResult.provider(),
                     "error", emailResult.error() != null ? emailResult.error() : "Failed to send OTP email",
-                    "message", emailResult.error() != null ? emailResult.error() : "Unable to deliver OTP verification email. Please verify SMTP settings."
+                    "message", emailResult.error() != null ? emailResult.error() : "Unable to deliver OTP verification email. Please verify mail settings in Admin -> Mail Communications Hub."
             ));
         }
 
