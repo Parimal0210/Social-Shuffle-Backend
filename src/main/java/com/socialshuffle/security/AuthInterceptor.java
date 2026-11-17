@@ -108,6 +108,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         if ("/api/payments/razorpay/config".equals(path) && !"GET".equalsIgnoreCase(method)) return true;
+        if ("/api/payments/razorpay/test-connection".equals(path)) return true;
 
         return false;
     }
