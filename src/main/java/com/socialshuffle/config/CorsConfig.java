@@ -23,9 +23,14 @@ public class CorsConfig {
 
         List<String> origins = Arrays.asList(allowedOrigins.split(","));
         for (String origin : origins) {
-            config.addAllowedOriginPattern(origin.trim());
+            String trimmed = origin.trim();
+            if (!trimmed.isEmpty() && !"*".equals(trimmed)) {
+                config.addAllowedOriginPattern(trimmed);
+            }
         }
-        config.addAllowedOriginPattern("*"); // Allow wildcard for preview environments
+        config.addAllowedOriginPattern("https://*.run.app");
+        config.addAllowedOriginPattern("http://localhost:*");
+        config.addAllowedOriginPattern("http://127.0.0.1:*");
 
         config.addAllowedHeader("*");
         config.addAllowedMethod("GET");

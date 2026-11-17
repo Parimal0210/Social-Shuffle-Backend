@@ -5,14 +5,19 @@ import com.socialshuffle.model.NotificationItem;
 import com.socialshuffle.model.Participant;
 import com.socialshuffle.model.Registration;
 import com.socialshuffle.model.ShuffleEvent;
+import com.socialshuffle.model.User;
 import com.socialshuffle.repository.AuditLogRepository;
 import com.socialshuffle.repository.NotificationItemRepository;
 import com.socialshuffle.repository.ParticipantRepository;
 import com.socialshuffle.repository.RegistrationRepository;
 import com.socialshuffle.repository.ShuffleEventRepository;
+import com.socialshuffle.repository.UserRepository;
+import com.socialshuffle.security.AuthInterceptor;
 import com.socialshuffle.service.EmailNotificationService;
 import com.socialshuffle.service.EmailNotificationService.EmailDeliveryResult;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,6 +37,7 @@ public class NotificationController {
     private final NotificationItemRepository notificationRepository;
     private final AuditLogRepository auditLogRepository;
     private final ParticipantRepository participantRepository;
+    private final UserRepository userRepository;
     private final EmailNotificationService emailNotificationService;
     private final Executor mailTaskExecutor;
 
@@ -40,6 +46,7 @@ public class NotificationController {
                                   NotificationItemRepository notificationRepository,
                                   AuditLogRepository auditLogRepository,
                                   ParticipantRepository participantRepository,
+                                  UserRepository userRepository,
                                   EmailNotificationService emailNotificationService,
                                   @Qualifier("mailTaskExecutor") Executor mailTaskExecutor) {
         this.eventRepository = eventRepository;
@@ -47,8 +54,27 @@ public class NotificationController {
         this.notificationRepository = notificationRepository;
         this.auditLogRepository = auditLogRepository;
         this.participantRepository = participantRepository;
+        this.userRepository = userRepository;
         this.emailNotificationService = emailNotificationService;
         this.mailTaskExecutor = mailTaskExecutor;
+    }
+
+    private boolean isAdminCaller(HttpServletRequest request) {
+        return request != null && "admin".equalsIgnoreCase(String.valueOf(request.getAttribute(AuthInterceptor.ATTR_ROLE)));
+    }
+
+    private boolean isRegistrationOwner(Registration reg, HttpServletRequest request) {
+        if (reg == null || request == null) return false;
+        Object userIdObj = request.getAttribute(AuthInterceptor.ATTR_USER_ID);
+        if (userIdObj == null) return false;
+        Optional<User> callerOpt = userRepository.findById(String.valueOf(userIdObj));
+        if (callerOpt.isEmpty()) return false;
+        User caller = callerOpt.get();
+        if (caller.getParticipantId() != null && caller.getParticipantId().equals(reg.getParticipantId())) return true;
+        if (caller.getId() != null && caller.getId().equals(reg.getParticipantId())) return true;
+        return caller.getEmail() != null
+                && reg.getParticipantEmail() != null
+                && caller.getEmail().equalsIgnoreCase(reg.getParticipantEmail().trim());
     }
 
     public static class EventBroadcastRequest {
@@ -245,11 +271,18 @@ public class NotificationController {
 
     @PostMapping("/registration-confirmation/{registrationId}")
     public ResponseEntity<?> sendRegistrationConfirmation(@PathVariable String registrationId,
-                                                          @RequestBody(required = false) Map<String, Object> body) {
+                                                          @RequestBody(required = false) Map<String, Object> body,
+                                                          HttpServletRequest request) {
+        boolean isAdmin = isAdminCaller(request);
         Optional<Registration> regOpt = registrationRepository.findById(registrationId);
         Registration reg = regOpt.orElse(null);
 
-        if (reg == null && body != null && body.get("registration") instanceof Map<?, ?> regMap) {
+        if (reg != null && !isAdmin && !isRegistrationOwner(reg, request)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("success", false, "message", "Access denied for this registration confirmation."));
+        }
+
+        if (reg == null && isAdmin && body != null && body.get("registration") instanceof Map<?, ?> regMap) {
             reg = new Registration();
             reg.setId(registrationId);
             reg.setEventId(regMap.get("eventId") != null ? String.valueOf(regMap.get("eventId")) : null);

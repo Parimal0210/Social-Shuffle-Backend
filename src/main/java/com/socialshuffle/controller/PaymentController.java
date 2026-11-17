@@ -2,8 +2,10 @@ package com.socialshuffle.controller;
 
 import com.socialshuffle.model.Registration;
 import com.socialshuffle.model.ShuffleEvent;
+import com.socialshuffle.model.User;
 import com.socialshuffle.repository.RegistrationRepository;
 import com.socialshuffle.repository.ShuffleEventRepository;
+import com.socialshuffle.repository.UserRepository;
 import com.socialshuffle.security.AuthInterceptor;
 import com.socialshuffle.service.AppConfigService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,13 +26,16 @@ public class PaymentController {
 
     private final RegistrationRepository registrationRepository;
     private final ShuffleEventRepository shuffleEventRepository;
+    private final UserRepository userRepository;
     private final AppConfigService appConfigService;
 
     public PaymentController(RegistrationRepository registrationRepository,
                              ShuffleEventRepository shuffleEventRepository,
+                             UserRepository userRepository,
                              AppConfigService appConfigService) {
         this.registrationRepository = registrationRepository;
         this.shuffleEventRepository = shuffleEventRepository;
+        this.userRepository = userRepository;
         this.appConfigService = appConfigService;
     }
 
@@ -56,11 +61,11 @@ public class PaymentController {
         String eventId = payload.get("eventId") != null ? String.valueOf(payload.get("eventId")).trim() : "";
         int paxCount = payload.get("paxCount") instanceof Number n ? Math.max(1, n.intValue()) : 1;
         Number amountNumber = payload.get("amount") instanceof Number n ? n : null;
-        double amount = amountNumber != null ? amountNumber.doubleValue() : 350.0;
+        double amount = amountNumber != null && amountNumber.doubleValue() > 0 ? amountNumber.doubleValue() : 350.0;
 
         if (!eventId.isEmpty()) {
             Optional<ShuffleEvent> eventOpt = shuffleEventRepository.findById(eventId);
-            if (eventOpt.isPresent() && eventOpt.get().getTicketPrice() > 0) {
+            if (eventOpt.isPresent() && eventOpt.get().getTicketPrice() >= 0) {
                 amount = eventOpt.get().getTicketPrice() * paxCount;
             }
         }
@@ -88,7 +93,7 @@ public class PaymentController {
     }
 
     @PostMapping("/verify-payment")
-    public ResponseEntity<?> verifyRazorpayPayment(@RequestBody Map<String, Object> payload) {
+    public ResponseEntity<?> verifyRazorpayPayment(@RequestBody Map<String, Object> payload, HttpServletRequest request) {
         String paymentId = payload.get("razorpayPaymentId") != null ? String.valueOf(payload.get("razorpayPaymentId")).trim() : "";
         String orderId = payload.get("razorpayOrderId") != null ? String.valueOf(payload.get("razorpayOrderId")).trim() : "";
         String signature = payload.get("razorpaySignature") != null ? String.valueOf(payload.get("razorpaySignature")).trim() : "";
@@ -105,7 +110,22 @@ public class PaymentController {
         String keySecret = cfg.get("keySecret") != null ? String.valueOf(cfg.get("keySecret")).trim() : "";
         boolean isLive = Boolean.TRUE.equals(cfg.get("isLive"));
 
-        if (!keySecret.isEmpty() && !signature.isEmpty() && !orderId.isEmpty()) {
+        if (isLive) {
+            if (keySecret.isEmpty()) {
+                return ResponseEntity.status(500).body(Map.of(
+                        "success", false,
+                        "verified", false,
+                        "message", "Razorpay keySecret is not configured for live verification."
+                ));
+            }
+            if (signature.isEmpty() || orderId.isEmpty() || !verifyHmacSha256(orderId + "|" + paymentId, signature, keySecret)) {
+                return ResponseEntity.status(400).body(Map.of(
+                        "success", false,
+                        "verified", false,
+                        "message", "Invalid Razorpay payment signature."
+                ));
+            }
+        } else if (!keySecret.isEmpty() && !signature.isEmpty() && !orderId.isEmpty()) {
             if (!verifyHmacSha256(orderId + "|" + paymentId, signature, keySecret)) {
                 return ResponseEntity.status(400).body(Map.of(
                         "success", false,
@@ -113,17 +133,25 @@ public class PaymentController {
                         "message", "Invalid Razorpay payment signature."
                 ));
             }
-        } else if (isLive && keySecret.isEmpty()) {
-            return ResponseEntity.status(500).body(Map.of(
-                    "success", false,
-                    "message", "Razorpay keySecret is not configured for live verification."
-            ));
+        }
+
+        boolean callerIsAdmin = "admin".equalsIgnoreCase(String.valueOf(request.getAttribute(AuthInterceptor.ATTR_ROLE)));
+        User caller = null;
+        if (!callerIsAdmin && request.getAttribute(AuthInterceptor.ATTR_USER_ID) != null) {
+            caller = userRepository.findById(String.valueOf(request.getAttribute(AuthInterceptor.ATTR_USER_ID))).orElse(null);
         }
 
         String now = Instant.now().toString();
         if (!registrationId.isEmpty()) {
             Optional<Registration> regOpt = registrationRepository.findById(registrationId);
-            regOpt.ifPresent(reg -> {
+            if (regOpt.isPresent()) {
+                Registration reg = regOpt.get();
+                if (!callerIsAdmin && !ownsRegistration(reg, caller)) {
+                    return ResponseEntity.status(403).body(Map.of(
+                            "success", false,
+                            "message", "Access denied: Cannot confirm payment for another user's registration."
+                    ));
+                }
                 reg.setPaymentStatus("Confirmed");
                 reg.setRazorpayPaymentId(paymentId);
                 if (!orderId.isEmpty()) {
@@ -131,7 +159,7 @@ public class PaymentController {
                 }
                 reg.setUpdatedAt(now);
                 registrationRepository.save(reg);
-            });
+            }
         }
 
         Map<String, Object> response = new LinkedHashMap<>();
@@ -144,6 +172,14 @@ public class PaymentController {
         response.put("verifiedAt", now);
 
         return ResponseEntity.ok(response);
+    }
+
+    private boolean ownsRegistration(Registration reg, User caller) {
+        if (caller == null || reg == null) return false;
+        if (caller.getParticipantId() != null && caller.getParticipantId().equals(reg.getParticipantId())) return true;
+        if (caller.getId() != null && caller.getId().equals(reg.getParticipantId())) return true;
+        return caller.getEmail() != null && reg.getParticipantEmail() != null
+                && caller.getEmail().equalsIgnoreCase(reg.getParticipantEmail().trim());
     }
 
     private boolean verifyHmacSha256(String data, String expectedHex, String secret) {

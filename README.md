@@ -40,9 +40,9 @@ To initialize or sync a fresh Supabase database, run `social_shuffle_supabase_po
      cd Social-Shuffle-Backend
      mvn spring-boot:run
      ```
-   - Set environment variables (`SMTP_USER`, `SMTP_PASS`, `RESEND_API_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `SECURITY_TOKEN_SECRET`) or configure SMTP/Razorpay from **Admin -> Communications / Settings** (saved to `app_configs`).
+   - Set environment variables (`SPRING_PROFILES_ACTIVE=prod`, `APP_JWT_SECRET`, `APP_CORS_ALLOWED_ORIGINS`, `SMTP_USER`, `SMTP_PASS`, `RESEND_API_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`) or configure SMTP/Razorpay from **Admin -> Communications / Settings** (saved to `app_configs`).
 2. **Frontend SPA + Proxy (Port 3000)**:
-   - Root `server.ts` serves the Vite React frontend on port `3000` and proxies `/api/*` to `JAVA_BACKEND_URL` (default `http://127.0.0.1:8080`).
+   - Root `server.ts` serves the Vite React frontend on port `3000` and proxies `/api/*` to `JAVA_BACKEND_URL` (default `http://127.0.0.1:8080`, or `8081` when co-located with preview proxy).
 
 ---
 

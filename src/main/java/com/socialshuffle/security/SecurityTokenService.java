@@ -1,5 +1,8 @@
 package com.socialshuffle.security;
 
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -17,16 +20,25 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class SecurityTokenService {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityTokenService.class);
     private static final String HMAC_ALGORITHM = "HmacSHA256";
+    private static final String DEFAULT_DEV_SECRET = "SocialShuffleSuperSecureHMAC256KeyPuneCommunityBoardGames2026!";
 
     @Value("${app.security.token-validity-ms:2592000000}")
     private long tokenValidityMs;
 
-    @Value("${app.security.jwt-secret:SocialShuffleSuperSecureHMAC256KeyPuneCommunityBoardGames2026!}")
+    @Value("${app.security.jwt-secret:" + DEFAULT_DEV_SECRET + "}")
     private String jwtSecret;
 
     // Revoked token IDs mapped to their expiration timestamp for cleanup
     private final Map<String, Long> revokedTokens = new ConcurrentHashMap<>();
+
+    @PostConstruct
+    public void validateSecretConfiguration() {
+        if (jwtSecret == null || jwtSecret.trim().length() < 32 || DEFAULT_DEV_SECRET.equals(jwtSecret)) {
+            log.warn("[SECURITY] Using default development JWT signing key. Set APP_JWT_SECRET (>=32 chars) in production!");
+        }
+    }
 
     public String generateToken(String userId, String role) {
         long now = System.currentTimeMillis();
@@ -68,7 +80,7 @@ public class SecurityTokenService {
             }
         }
         long now = System.currentTimeMillis();
-        if (revokedTokens.size() > 500) {
+        if (revokedTokens.size() > 250) {
             revokedTokens.entrySet().removeIf(e -> e.getValue() < now);
         }
     }

@@ -162,7 +162,8 @@ public class RegistrationController {
         if (registration.getId() == null || registration.getId().trim().isEmpty()) {
             registration.setId("reg-" + UUID.randomUUID().toString().substring(0, 8));
         }
-        if (!isAdmin(request)) {
+        boolean callerIsAdmin = isAdmin(request);
+        if (!callerIsAdmin) {
             User caller = resolveCallerUser(request).orElse(null);
             if (caller != null) {
                 if (registration.getParticipantId() == null || registration.getParticipantId().isBlank()) {
@@ -171,6 +172,15 @@ public class RegistrationController {
                 if (registration.getParticipantEmail() == null || registration.getParticipantEmail().isBlank()) {
                     registration.setParticipantEmail(caller.getEmail());
                 }
+            }
+            // Non-admin callers cannot self-mark Checked In on creation
+            if ("Checked In".equalsIgnoreCase(registration.getAttendanceStatus()) || registration.getAttendanceStatus() == null || registration.getAttendanceStatus().isBlank()) {
+                registration.setAttendanceStatus("Registered");
+            }
+            // Require a Razorpay payment ID for Confirmed status unless ticket is free
+            boolean hasPaymentRef = registration.getRazorpayPaymentId() != null && !registration.getRazorpayPaymentId().isBlank();
+            if (!hasPaymentRef && "Confirmed".equalsIgnoreCase(registration.getPaymentStatus())) {
+                registration.setPaymentStatus("Pending");
             }
         }
         if (registration.getParticipantId() == null || registration.getParticipantId().isBlank()) {
@@ -186,7 +196,7 @@ public class RegistrationController {
         if (registration.getRegisteredAt() == null) registration.setRegisteredAt(now);
         if (registration.getCreatedAt() == null) registration.setCreatedAt(now);
         registration.setUpdatedAt(now);
-        if (registration.getAttendanceStatus() == null) registration.setAttendanceStatus("Pending");
+        if (registration.getAttendanceStatus() == null) registration.setAttendanceStatus("Registered");
         if (registration.getPaymentStatus() == null) registration.setPaymentStatus("Pending");
         if (registration.getPaymentMethod() == null) registration.setPaymentMethod("UPI");
         if (registration.getPaxCount() < 1) registration.setPaxCount(1);
@@ -214,8 +224,22 @@ public class RegistrationController {
         ShuffleEvent event = null;
         if (registration.getEventId() != null) {
             event = shuffleEventRepository.findById(registration.getEventId()).orElse(null);
-            if (event != null && (registration.getAmountPaid() == null || registration.getAmountPaid() <= 0)) {
-                registration.setAmountPaid(event.getTicketPrice() * Math.max(1, registration.getPaxCount()));
+            if (event != null) {
+                if (!callerIsAdmin && event.getCapacity() > 0) {
+                    int activeSeats = registrationRepository.sumActivePaxByEventId(event.getId());
+                    if (activeSeats + registration.getPaxCount() > event.getCapacity()) {
+                        return ResponseEntity.status(409).body(Map.of(
+                                "success", false,
+                                "message", "Sorry, this meetup does not have enough remaining seats for " + registration.getPaxCount() + " shuffler(s)."
+                        ));
+                    }
+                }
+                if (event.getTicketPrice() <= 0 && !callerIsAdmin) {
+                    registration.setAmountPaid(0.0);
+                    registration.setPaymentStatus("Confirmed");
+                } else if (registration.getAmountPaid() == null || registration.getAmountPaid() <= 0 || !callerIsAdmin) {
+                    registration.setAmountPaid(event.getTicketPrice() * Math.max(1, registration.getPaxCount()));
+                }
             }
         }
 

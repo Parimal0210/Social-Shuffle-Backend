@@ -78,12 +78,15 @@ public class SystemHealthController {
                 meta.put("databaseProduct", conn.getMetaData().getDatabaseProductName());
                 meta.put("databaseVersion", conn.getMetaData().getDatabaseProductVersion());
                 meta.put("databaseCatalog", conn.getCatalog());
-                meta.put("databaseUrl", conn.getMetaData().getURL());
-                meta.put("databaseUser", conn.getMetaData().getUserName());
+                String rawUrl = conn.getMetaData().getURL();
+                if (rawUrl != null) {
+                    int qIdx = rawUrl.indexOf('?');
+                    meta.put("databaseHost", qIdx > 0 ? rawUrl.substring(0, qIdx) : rawUrl);
+                }
                 cachedMetadata = meta;
             }
         } catch (Exception e) {
-            health.put("databaseError", e.getMessage());
+            health.put("databaseError", "Database connectivity check failed");
         }
 
         health.put("status", dbConnected ? "UP" : "DEGRADED");

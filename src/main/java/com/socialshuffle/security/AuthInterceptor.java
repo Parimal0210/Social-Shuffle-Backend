@@ -73,6 +73,8 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private boolean requiresAdmin(String path, String method) {
         if (path.startsWith("/api/admin/") || path.startsWith("/api/export/")) return true;
+        if (path.startsWith("/api/admins/") && !"/api/admins/check".equals(path)) return true;
+        if ("/api/auth/google/device-accounts".equals(path)) return true;
         if (path.startsWith("/api/communications/")) return true;
         if (path.startsWith("/api/audit-logs")) return true;
 

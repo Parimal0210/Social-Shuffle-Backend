@@ -71,11 +71,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneralException(Exception ex) {
-        log.error("General Exception caught: {}", ex.getMessage(), ex);
-        String msg = ex.getMessage() != null && !ex.getMessage().isBlank()
-                ? ex.getMessage()
-                : "An unexpected error occurred. Please try again later.";
-        return buildError(HttpStatus.INTERNAL_SERVER_ERROR.value(), msg);
+        log.error("Unhandled server exception caught securely: {}", ex.getMessage(), ex);
+        return buildError(HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                "An unexpected server error occurred. Please try again later.");
     }
 
     private ResponseEntity<Map<String, Object>> buildError(int status, String message) {

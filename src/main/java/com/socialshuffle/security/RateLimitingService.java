@@ -64,6 +64,12 @@ public class RateLimitingService {
             }
             return existing;
         });
+
+        if (attemptsMap.size() > 2000) {
+            attemptsMap.entrySet().removeIf(e ->
+                    (e.getValue().lockedUntil > 0 && e.getValue().lockedUntil <= now)
+                            || (now - e.getValue().lastAttemptTime > LOCKOUT_DURATION_MS));
+        }
     }
 
     /**

@@ -19,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -26,12 +27,17 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.Signature;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -42,6 +48,15 @@ public class AuthController {
     private static final long OTP_TTL_MS = 10 * 60 * 1000L;
     private static final long OTP_COOLDOWN_MS = 15 * 1000L;
     private static final int MAX_OTP_ATTEMPTS = 5;
+
+    @Value("${app.security.google-client-id:13280287385-p4ts02igubi7r9cvd2dnkbf5t4d4gbpi.apps.googleusercontent.com}")
+    private String expectedGoogleClientId;
+
+    @Value("${app.security.firebase-project-id:gen-lang-client-0301643360}")
+    private String expectedFirebaseProjectId;
+
+    private volatile Map<String, PublicKey> cachedFirebaseCerts = Collections.emptyMap();
+    private volatile long firebaseCertsFetchedAt = 0L;
 
     private final UserRepository userRepository;
     private final ParticipantRepository participantRepository;
@@ -109,6 +124,12 @@ public class AuthController {
             }
         }
 
+        if (otpSendWindow.size() > 1000) {
+            otpSendWindow.entrySet().removeIf(e -> {
+                e.getValue().removeIf(t -> now - t > 15 * 60 * 1000L);
+                return e.getValue().isEmpty();
+            });
+        }
         List<Long> timestamps = otpSendWindow.computeIfAbsent(rawEmail, k -> Collections.synchronizedList(new ArrayList<>()));
         timestamps.removeIf(t -> now - t > 15 * 60 * 1000L);
         if (timestamps.size() >= 5) {
@@ -731,7 +752,51 @@ public class AuthController {
         String idToken = req.getIdToken() != null ? req.getIdToken().trim() : "";
         String accessToken = req.getAccessToken() != null ? req.getAccessToken().trim() : "";
 
+        // 1. Prefer Google OAuth2 accessToken verification via official UserInfo API
+        if (!accessToken.isEmpty()) {
+            try {
+                HttpRequest httpReq = HttpRequest.newBuilder()
+                        .uri(URI.create("https://www.googleapis.com/oauth2/v3/userinfo"))
+                        .timeout(Duration.ofSeconds(8))
+                        .header("Authorization", "Bearer " + accessToken)
+                        .GET().build();
+                HttpResponse<String> resp = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() == 200) {
+                    Map<?, ?> data = objectMapper.readValue(resp.body(), Map.class);
+                    String verifiedEmail = data.get("email") != null ? String.valueOf(data.get("email")).trim().toLowerCase() : "";
+                    boolean emailVerified = Boolean.TRUE.equals(data.get("email_verified"))
+                            || "true".equalsIgnoreCase(String.valueOf(data.get("email_verified")));
+                    if (verifiedEmail.isEmpty() || !emailVerified) {
+                        return new VerifiedGoogleIdentity(false, null, null, null, null, "Google account email is not verified.");
+                    }
+                    if (!claimedEmail.isEmpty() && !claimedEmail.equals(verifiedEmail)) {
+                        return new VerifiedGoogleIdentity(false, null, null, null, null, "Google token email mismatch.");
+                    }
+                    return new VerifiedGoogleIdentity(
+                            true,
+                            verifiedEmail,
+                            data.get("name") != null ? String.valueOf(data.get("name")) : req.getName(),
+                            data.get("picture") != null ? String.valueOf(data.get("picture")) : req.getAvatar(),
+                            data.get("sub") != null ? String.valueOf(data.get("sub")) : req.getGoogleId(),
+                            null
+                    );
+                }
+                if (idToken.isEmpty()) {
+                    return new VerifiedGoogleIdentity(false, null, null, null, null, "Google access token verification failed.");
+                }
+            } catch (Exception e) {
+                if (idToken.isEmpty()) {
+                    return new VerifiedGoogleIdentity(false, null, null, null, null, "Failed to verify Google access token.");
+                }
+            }
+        }
+
+        // 2. Verify Firebase Auth ID Token (RS256) OR Google OIDC ID Token
         if (!idToken.isEmpty()) {
+            VerifiedGoogleIdentity firebaseCheck = verifyFirebaseIdTokenIfApplicable(idToken, claimedEmail, req);
+            if (firebaseCheck != null) {
+                return firebaseCheck;
+            }
             try {
                 HttpRequest httpReq = HttpRequest.newBuilder()
                         .uri(URI.create("https://oauth2.googleapis.com/tokeninfo?id_token=" + URLEncoder.encode(idToken, StandardCharsets.UTF_8)))
@@ -742,6 +807,10 @@ public class AuthController {
                     return new VerifiedGoogleIdentity(false, null, null, null, null, "Google ID token verification failed.");
                 }
                 Map<?, ?> data = objectMapper.readValue(resp.body(), Map.class);
+                String aud = data.get("aud") != null ? String.valueOf(data.get("aud")).trim() : "";
+                if (!expectedGoogleClientId.isEmpty() && !aud.isEmpty() && !expectedGoogleClientId.equals(aud)) {
+                    return new VerifiedGoogleIdentity(false, null, null, null, null, "Google token audience mismatch.");
+                }
                 String verifiedEmail = data.get("email") != null ? String.valueOf(data.get("email")).trim().toLowerCase() : "";
                 boolean emailVerified = "true".equalsIgnoreCase(String.valueOf(data.get("email_verified")));
                 if (verifiedEmail.isEmpty() || !emailVerified) {
@@ -763,43 +832,100 @@ public class AuthController {
             }
         }
 
-        if (!accessToken.isEmpty()) {
-            try {
-                HttpRequest httpReq = HttpRequest.newBuilder()
-                        .uri(URI.create("https://www.googleapis.com/oauth2/v3/userinfo"))
-                        .timeout(Duration.ofSeconds(8))
-                        .header("Authorization", "Bearer " + accessToken)
-                        .GET().build();
-                HttpResponse<String> resp = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
-                if (resp.statusCode() != 200) {
-                    return new VerifiedGoogleIdentity(false, null, null, null, null, "Google access token verification failed.");
+        return new VerifiedGoogleIdentity(false, null, null, null, null,
+                "A verified Google OAuth token (idToken or accessToken) is required.");
+    }
+
+    private VerifiedGoogleIdentity verifyFirebaseIdTokenIfApplicable(String idToken, String claimedEmail, GoogleLoginRequest req) {
+        try {
+            String[] parts = idToken.split("\\.");
+            if (parts.length != 3) return null;
+
+            String headerJson = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+            String payloadJson = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+            Map<?, ?> header = objectMapper.readValue(headerJson, Map.class);
+            Map<?, ?> payload = objectMapper.readValue(payloadJson, Map.class);
+
+            String iss = payload.get("iss") != null ? String.valueOf(payload.get("iss")) : "";
+            String expectedIss = "https://securetoken.google.com/" + expectedFirebaseProjectId;
+            if (!expectedIss.equals(iss)) {
+                return null; // Not a Firebase token for this project; try Google OIDC tokeninfo
+            }
+
+            if (!"RS256".equals(header.get("alg"))) {
+                return new VerifiedGoogleIdentity(false, null, null, null, null, "Unsupported Firebase token algorithm.");
+            }
+            String kid = header.get("kid") != null ? String.valueOf(header.get("kid")) : "";
+            PublicKey key = getFirebasePublicKey(kid);
+            if (key == null) {
+                return new VerifiedGoogleIdentity(false, null, null, null, null, "Unable to locate Firebase signing certificate.");
+            }
+
+            Signature sig = Signature.getInstance("SHA256withRSA");
+            sig.initVerify(key);
+            sig.update((parts[0] + "." + parts[1]).getBytes(StandardCharsets.UTF_8));
+            byte[] sigBytes = Base64.getUrlDecoder().decode(parts[2]);
+            if (!sig.verify(sigBytes)) {
+                return new VerifiedGoogleIdentity(false, null, null, null, null, "Invalid Firebase token signature.");
+            }
+
+            String aud = payload.get("aud") != null ? String.valueOf(payload.get("aud")) : "";
+            if (!expectedFirebaseProjectId.equals(aud)) {
+                return new VerifiedGoogleIdentity(false, null, null, null, null, "Firebase token audience mismatch.");
+            }
+
+            long exp = payload.get("exp") instanceof Number n ? n.longValue() : 0L;
+            if (exp * 1000L <= System.currentTimeMillis()) {
+                return new VerifiedGoogleIdentity(false, null, null, null, null, "Google session token has expired. Please sign in again.");
+            }
+
+            String verifiedEmail = payload.get("email") != null ? String.valueOf(payload.get("email")).trim().toLowerCase() : "";
+            boolean emailVerified = Boolean.TRUE.equals(payload.get("email_verified"))
+                    || "true".equalsIgnoreCase(String.valueOf(payload.get("email_verified")));
+            if (verifiedEmail.isEmpty() || !emailVerified) {
+                return new VerifiedGoogleIdentity(false, null, null, null, null, "Google email is not verified.");
+            }
+            if (!claimedEmail.isEmpty() && !claimedEmail.equals(verifiedEmail)) {
+                return new VerifiedGoogleIdentity(false, null, null, null, null, "Google token email mismatch.");
+            }
+
+            return new VerifiedGoogleIdentity(
+                    true,
+                    verifiedEmail,
+                    payload.get("name") != null ? String.valueOf(payload.get("name")) : req.getName(),
+                    payload.get("picture") != null ? String.valueOf(payload.get("picture")) : req.getAvatar(),
+                    payload.get("sub") != null ? String.valueOf(payload.get("sub")) : req.getGoogleId(),
+                    null
+            );
+        } catch (Exception e) {
+            return new VerifiedGoogleIdentity(false, null, null, null, null, "Failed to verify Firebase authentication token.");
+        }
+    }
+
+    private PublicKey getFirebasePublicKey(String kid) throws Exception {
+        long now = System.currentTimeMillis();
+        if (cachedFirebaseCerts.isEmpty() || (now - firebaseCertsFetchedAt) > 3600_000L || !cachedFirebaseCerts.containsKey(kid)) {
+            HttpRequest certReq = HttpRequest.newBuilder()
+                    .uri(URI.create("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"))
+                    .timeout(Duration.ofSeconds(8))
+                    .GET().build();
+            HttpResponse<String> resp = httpClient.send(certReq, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) {
+                Map<?, ?> rawMap = objectMapper.readValue(resp.body(), Map.class);
+                Map<String, PublicKey> keys = new HashMap<>();
+                CertificateFactory cf = CertificateFactory.getInstance("X.509");
+                for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                    if (entry.getKey() != null && entry.getValue() != null) {
+                        byte[] bytes = String.valueOf(entry.getValue()).getBytes(StandardCharsets.UTF_8);
+                        X509Certificate cert = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(bytes));
+                        keys.put(String.valueOf(entry.getKey()), cert.getPublicKey());
+                    }
                 }
-                Map<?, ?> data = objectMapper.readValue(resp.body(), Map.class);
-                String verifiedEmail = data.get("email") != null ? String.valueOf(data.get("email")).trim().toLowerCase() : "";
-                boolean emailVerified = Boolean.TRUE.equals(data.get("email_verified")) || "true".equalsIgnoreCase(String.valueOf(data.get("email_verified")));
-                if (verifiedEmail.isEmpty() || !emailVerified) {
-                    return new VerifiedGoogleIdentity(false, null, null, null, null, "Google account email is not verified.");
-                }
-                if (!claimedEmail.isEmpty() && !claimedEmail.equals(verifiedEmail)) {
-                    return new VerifiedGoogleIdentity(false, null, null, null, null, "Google token email mismatch.");
-                }
-                return new VerifiedGoogleIdentity(
-                        true,
-                        verifiedEmail,
-                        data.get("name") != null ? String.valueOf(data.get("name")) : req.getName(),
-                        data.get("picture") != null ? String.valueOf(data.get("picture")) : req.getAvatar(),
-                        data.get("sub") != null ? String.valueOf(data.get("sub")) : req.getGoogleId(),
-                        null
-                );
-            } catch (Exception e) {
-                return new VerifiedGoogleIdentity(false, null, null, null, null, "Failed to verify Google access token.");
+                cachedFirebaseCerts = keys;
+                firebaseCertsFetchedAt = now;
             }
         }
-
-        if (claimedEmail.isEmpty()) {
-            return new VerifiedGoogleIdentity(false, null, null, null, null, "Google email or OAuth token is required.");
-        }
-        return new VerifiedGoogleIdentity(true, claimedEmail, req.getName(), req.getAvatar(), req.getGoogleId(), null);
+        return cachedFirebaseCerts.get(kid);
     }
 
     private void upsertGoogleUserRecord(String email, String googleId, String participantId, User user, Participant participant, String nowIso) {

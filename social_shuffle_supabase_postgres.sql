@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS admins (
     created_at VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_admins_active ON admins (active);
-CREATE INDEX IF NOT EXISTS idx_admins_email ON admins (email);
+CREATE INDEX IF NOT EXISTS idx_admin_active ON admins (active);
+CREATE INDEX IF NOT EXISTS idx_admin_email ON admins (email);
 
 -- ------------------------------------------------------------------------------
 -- 2. Table structure for table: users
@@ -106,9 +106,9 @@ CREATE TABLE IF NOT EXISTS participants (
     updated_at VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_participants_phone ON participants (phone);
-CREATE INDEX IF NOT EXISTS idx_participants_area ON participants (area);
-CREATE INDEX IF NOT EXISTS idx_participants_email ON participants (email);
+CREATE INDEX IF NOT EXISTS idx_participant_phone ON participants (phone);
+CREATE INDEX IF NOT EXISTS idx_participant_area ON participants (area);
+CREATE INDEX IF NOT EXISTS idx_participant_email ON participants (email);
 
 -- ------------------------------------------------------------------------------
 -- 5. Table structure for table: venues
@@ -155,8 +155,8 @@ CREATE TABLE IF NOT EXISTS events (
     updated_at VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_events_date ON events (date);
-CREATE INDEX IF NOT EXISTS idx_events_status ON events (status);
+CREATE INDEX IF NOT EXISTS idx_event_date ON events (date);
+CREATE INDEX IF NOT EXISTS idx_event_status ON events (status);
 
 -- ------------------------------------------------------------------------------
 -- 7. Table structure for table: games
@@ -182,8 +182,9 @@ CREATE TABLE IF NOT EXISTS games (
     updated_at VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_games_category ON games (category);
-CREATE INDEX IF NOT EXISTS idx_games_active ON games (active);
+CREATE INDEX IF NOT EXISTS idx_game_category ON games (category);
+CREATE INDEX IF NOT EXISTS idx_game_difficulty ON games (difficulty);
+CREATE INDEX IF NOT EXISTS idx_game_active ON games (active);
 
 -- ------------------------------------------------------------------------------
 -- 8. Table structure for table: badge_levels
@@ -220,8 +221,8 @@ CREATE TABLE IF NOT EXISTS participant_badges (
     is_current BOOLEAN DEFAULT FALSE
 );
 
-CREATE INDEX IF NOT EXISTS idx_pbadges_part ON participant_badges (participant_id);
-CREATE INDEX IF NOT EXISTS idx_pbadges_lvl ON participant_badges (badge_level);
+CREATE INDEX IF NOT EXISTS idx_part_badge_participant ON participant_badges (participant_id);
+CREATE INDEX IF NOT EXISTS idx_part_badge_level ON participant_badges (badge_level);
 
 -- ------------------------------------------------------------------------------
 -- 10. Table structure for table: registrations
@@ -256,8 +257,8 @@ CREATE TABLE IF NOT EXISTS registrations (
     updated_at VARCHAR(50)
 );
 
-CREATE INDEX IF NOT EXISTS idx_registrations_event_id ON registrations (event_id);
-CREATE INDEX IF NOT EXISTS idx_registrations_participant_id ON registrations (participant_id);
+CREATE INDEX IF NOT EXISTS idx_reg_event ON registrations (event_id);
+CREATE INDEX IF NOT EXISTS idx_reg_participant ON registrations (participant_id);
 
 -- ------------------------------------------------------------------------------
 -- 11. Table structure for table: event_feedback
@@ -279,7 +280,7 @@ CREATE TABLE IF NOT EXISTS event_feedback (
     extra_json TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_feedback_event_id ON event_feedback (event_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_event ON event_feedback (event_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_participant ON event_feedback (participant_id);
 
 -- ------------------------------------------------------------------------------
@@ -370,8 +371,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     is_read BOOLEAN DEFAULT FALSE
 );
 
-CREATE INDEX IF NOT EXISTS idx_notifications_timestamp ON notifications ("timestamp");
-CREATE INDEX IF NOT EXISTS idx_notifications_event_id ON notifications (event_id);
+CREATE INDEX IF NOT EXISTS idx_notif_timestamp ON notifications ("timestamp");
+CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications (is_read);
 CREATE INDEX IF NOT EXISTS idx_notif_email_ts ON notifications (recipient_email, "timestamp");
 CREATE INDEX IF NOT EXISTS idx_notif_event_ts ON notifications (event_id, "timestamp");
 
@@ -893,3 +894,30 @@ INSERT INTO participants (id, name, email, phone, username, area, avatar, bio, j
   ('p-siddharth-nov10', 'Siddharth Verma', 'siddharth.v@example.com', '+91 98905 77114', 'siddharth.v', 'Baner', 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=160&q=80', 'Passionate gamer recently moved from Bengaluru. Ready for weekend shuffles!', '2026-11-10', 0, 1, '[]', '[]', 0, NULL, NULL)
 ON CONFLICT (id) DO NOTHING;
 
+-- ------------------------------------------------------------------------------
+-- Production Supabase Security Hardening:
+-- Enable Row Level Security (RLS) & revoke direct PostgREST access from anon/authenticated
+-- Spring Boot JDBC owner role accesses tables via authenticated REST API layer only.
+-- ------------------------------------------------------------------------------
+ALTER TABLE public.admins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.venues ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.games ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.badge_levels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.participant_badges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.registrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.event_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.safety_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.volunteer_applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.community_stats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.google_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.otp_verifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_configs ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
