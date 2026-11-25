@@ -1,15 +1,23 @@
 package com.socialshuffle.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.socialshuffle.model.ConqueredGameEntry;
+import com.socialshuffle.model.Game;
 import com.socialshuffle.model.Participant;
 import com.socialshuffle.model.User;
 import com.socialshuffle.repository.*;
 import com.socialshuffle.security.AuthInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
 
 @RestController
@@ -23,19 +31,27 @@ public class ParticipantController {
     private final UserCredentialRepository userCredentialRepository;
     private final ParticipantBadgeRepository participantBadgeRepository;
     private final GoogleUserRepository googleUserRepository;
+    private final GameRepository gameRepository;
+    private final CacheManager cacheManager;
+    private static final ObjectMapper objectMapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     public ParticipantController(ParticipantRepository participantRepository,
                                  RegistrationRepository registrationRepository,
                                  UserRepository userRepository,
                                  UserCredentialRepository userCredentialRepository,
                                  ParticipantBadgeRepository participantBadgeRepository,
-                                 GoogleUserRepository googleUserRepository) {
+                                 GoogleUserRepository googleUserRepository,
+                                 GameRepository gameRepository,
+                                 CacheManager cacheManager) {
         this.participantRepository = participantRepository;
         this.registrationRepository = registrationRepository;
         this.userRepository = userRepository;
         this.userCredentialRepository = userCredentialRepository;
         this.participantBadgeRepository = participantBadgeRepository;
         this.googleUserRepository = googleUserRepository;
+        this.gameRepository = gameRepository;
+        this.cacheManager = cacheManager;
     }
 
     private boolean isAdmin(HttpServletRequest request) {
@@ -153,15 +169,54 @@ public class ParticipantController {
         if (updates.get("bio") != null) existing.setBio(String.valueOf(updates.get("bio")).trim());
         if (updates.get("avatar") != null) existing.setAvatar(String.valueOf(updates.get("avatar")).trim());
 
+        Set<String> previousPlayedIds = new LinkedHashSet<>(
+                existing.getGamesPlayedIds() != null ? existing.getGamesPlayedIds() : Collections.emptyList()
+        );
+        List<Game> allGames = gameRepository.findAll();
+
+        // Both the authenticated participant (self) and admins can update their gaming passport logs
+        if (updates.get("gamesPlayedIds") instanceof List<?> list) {
+            Set<String> gids = new LinkedHashSet<>();
+            for (Object item : list) {
+                if (item != null) {
+                    String s = String.valueOf(item).trim();
+                    if (!s.isEmpty()) gids.add(s);
+                }
+            }
+            existing.setGamesPlayedIds(new ArrayList<>(gids));
+        }
+        if (updates.get("conqueredGames") instanceof List<?> rawConquered) {
+            try {
+                List<ConqueredGameEntry> parsedEntries = objectMapper.convertValue(
+                        rawConquered,
+                        new TypeReference<List<ConqueredGameEntry>>() {}
+                );
+                List<ConqueredGameEntry> normalizedEntries = new ArrayList<>();
+                Set<String> currentPlayed = new LinkedHashSet<>(
+                        existing.getGamesPlayedIds() != null ? existing.getGamesPlayedIds() : Collections.emptyList()
+                );
+                for (ConqueredGameEntry entry : parsedEntries) {
+                    if (entry == null || entry.getName() == null || entry.getName().trim().isEmpty()) {
+                        continue;
+                    }
+                    ConqueredGameEntry normalized = normalizeConqueredEntry(entry, allGames, now);
+                    normalizedEntries.add(normalized);
+                    if (normalized.getLibraryGameId() != null && !normalized.getLibraryGameId().isEmpty()) {
+                        currentPlayed.add(normalized.getLibraryGameId());
+                    }
+                }
+                existing.setConqueredGames(normalizedEntries);
+                existing.setGamesPlayedIds(new ArrayList<>(currentPlayed));
+            } catch (Exception ignored) {
+            }
+        }
+
+        incrementNewlyPlayedLibraryGames(previousPlayedIds, existing.getGamesPlayedIds(), allGames, now);
+
         if (admin) {
             if (updates.get("totalEventsAttended") instanceof Number n) existing.setTotalEventsAttended(Math.max(0, n.intValue()));
             if (updates.get("totalRegistrations") instanceof Number n) existing.setTotalRegistrations(Math.max(0, n.intValue()));
             if (updates.get("totalPaxBrought") instanceof Number n) existing.setTotalPaxBrought(Math.max(0, n.intValue()));
-            if (updates.get("gamesPlayedIds") instanceof List<?> list) {
-                List<String> gids = new ArrayList<>();
-                for (Object item : list) if (item != null) gids.add(String.valueOf(item));
-                existing.setGamesPlayedIds(gids);
-            }
             if (updates.get("venuesVisited") instanceof List<?> list) {
                 List<String> venues = new ArrayList<>();
                 for (Object item : list) if (item != null) venues.add(String.valueOf(item));
@@ -192,6 +247,371 @@ public class ParticipantController {
         }
 
         return ResponseEntity.ok(saved);
+    }
+
+    @GetMapping("/{id}/passport")
+    public ResponseEntity<?> getPassport(@PathVariable String id, HttpServletRequest request) {
+        if (!canAccessParticipant(id, request)) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "message", "Access denied: You can only view your own board gaming passport."
+            ));
+        }
+        Optional<Participant> opt = participantRepository.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        List<Game> allGames = gameRepository.findAll();
+        return ResponseEntity.ok(buildPassportSummary(opt.get(), allGames));
+    }
+
+    @PostMapping("/{id}/passport/games")
+    @Transactional
+    public ResponseEntity<?> addPassportGame(@PathVariable String id,
+                                             @RequestBody ConqueredGameEntry rawEntry,
+                                             HttpServletRequest request) {
+        if (!canAccessParticipant(id, request)) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "message", "Access denied: You can only update your own board gaming passport."
+            ));
+        }
+        Optional<Participant> opt = participantRepository.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        if (rawEntry == null || rawEntry.getName() == null || rawEntry.getName().trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "Game name is required."
+            ));
+        }
+
+        Participant participant = opt.get();
+        String now = Instant.now().toString();
+        List<Game> allGames = gameRepository.findAll();
+        Set<String> previousPlayedIds = new LinkedHashSet<>(
+                participant.getGamesPlayedIds() != null ? participant.getGamesPlayedIds() : Collections.emptyList()
+        );
+
+        ConqueredGameEntry normalized = normalizeConqueredEntry(rawEntry, allGames, now);
+        List<ConqueredGameEntry> updatedList = new ArrayList<>();
+        updatedList.add(normalized);
+        if (participant.getConqueredGames() != null) {
+            updatedList.addAll(participant.getConqueredGames());
+        }
+        participant.setConqueredGames(updatedList);
+
+        Set<String> nextPlayedIds = new LinkedHashSet<>(previousPlayedIds);
+        if (normalized.getLibraryGameId() != null && !normalized.getLibraryGameId().isEmpty()) {
+            nextPlayedIds.add(normalized.getLibraryGameId());
+        }
+        participant.setGamesPlayedIds(new ArrayList<>(nextPlayedIds));
+        participant.setUpdatedAt(now);
+
+        incrementNewlyPlayedLibraryGames(previousPlayedIds, participant.getGamesPlayedIds(), allGames, now);
+        Participant saved = participantRepository.save(participant);
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("success", true);
+        resp.put("entry", normalized);
+        resp.put("participant", saved);
+        resp.put("passport", buildPassportSummary(saved, allGames));
+        return ResponseEntity.ok(resp);
+    }
+
+    @PutMapping("/{id}/passport/games/{entryId}")
+    @Transactional
+    public ResponseEntity<?> updatePassportGame(@PathVariable String id,
+                                                @PathVariable String entryId,
+                                                @RequestBody ConqueredGameEntry updates,
+                                                HttpServletRequest request) {
+        if (!canAccessParticipant(id, request)) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "message", "Access denied: You can only update your own board gaming passport."
+            ));
+        }
+        Optional<Participant> opt = participantRepository.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Participant participant = opt.get();
+        List<ConqueredGameEntry> existingEntries = participant.getConqueredGames() != null
+                ? new ArrayList<>(participant.getConqueredGames())
+                : new ArrayList<>();
+        List<Game> allGames = gameRepository.findAll();
+        String now = Instant.now().toString();
+        Set<String> previousPlayedIds = new LinkedHashSet<>(
+                participant.getGamesPlayedIds() != null ? participant.getGamesPlayedIds() : Collections.emptyList()
+        );
+
+        ConqueredGameEntry updatedEntry = null;
+        for (int i = 0; i < existingEntries.size(); i++) {
+            ConqueredGameEntry current = existingEntries.get(i);
+            if (current != null && entryId.equals(current.getId())) {
+                ConqueredGameEntry merged = new ConqueredGameEntry();
+                merged.setId(current.getId());
+                merged.setName(updates.getName() != null && !updates.getName().trim().isEmpty()
+                        ? updates.getName().trim() : current.getName());
+                merged.setGenre(updates.getGenre() != null && !updates.getGenre().trim().isEmpty()
+                        ? updates.getGenre().trim() : current.getGenre());
+                merged.setPlayers(updates.getPlayers() != null && !updates.getPlayers().trim().isEmpty()
+                        ? updates.getPlayers().trim() : current.getPlayers());
+                merged.setDuration(updates.getDuration() != null && !updates.getDuration().trim().isEmpty()
+                        ? updates.getDuration().trim() : current.getDuration());
+                merged.setDatePlayed(updates.getDatePlayed() != null && !updates.getDatePlayed().trim().isEmpty()
+                        ? updates.getDatePlayed().trim() : current.getDatePlayed());
+                merged.setNotes(updates.getNotes() != null ? updates.getNotes().trim() : current.getNotes());
+                merged.setLibraryGameId(updates.getLibraryGameId());
+                merged.setCreatedAt(current.getCreatedAt() != null ? current.getCreatedAt() : now);
+
+                updatedEntry = normalizeConqueredEntry(merged, allGames, now);
+                existingEntries.set(i, updatedEntry);
+                break;
+            }
+        }
+
+        if (updatedEntry == null) {
+            return ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "message", "Conquered game entry not found."
+            ));
+        }
+
+        participant.setConqueredGames(existingEntries);
+        Set<String> nextPlayedIds = new LinkedHashSet<>(previousPlayedIds);
+        for (ConqueredGameEntry item : existingEntries) {
+            if (item.getLibraryGameId() != null && !item.getLibraryGameId().isEmpty()) {
+                nextPlayedIds.add(item.getLibraryGameId());
+            }
+        }
+        participant.setGamesPlayedIds(new ArrayList<>(nextPlayedIds));
+        participant.setUpdatedAt(now);
+
+        incrementNewlyPlayedLibraryGames(previousPlayedIds, participant.getGamesPlayedIds(), allGames, now);
+        Participant saved = participantRepository.save(participant);
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("success", true);
+        resp.put("entry", updatedEntry);
+        resp.put("participant", saved);
+        resp.put("passport", buildPassportSummary(saved, allGames));
+        return ResponseEntity.ok(resp);
+    }
+
+    @DeleteMapping("/{id}/passport/games/{entryId}")
+    @Transactional
+    public ResponseEntity<?> deletePassportGame(@PathVariable String id,
+                                                @PathVariable String entryId,
+                                                HttpServletRequest request) {
+        if (!canAccessParticipant(id, request)) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "message", "Access denied: You can only update your own board gaming passport."
+            ));
+        }
+        Optional<Participant> opt = participantRepository.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Participant participant = opt.get();
+        List<ConqueredGameEntry> existingEntries = participant.getConqueredGames() != null
+                ? participant.getConqueredGames()
+                : Collections.emptyList();
+
+        ConqueredGameEntry removed = null;
+        List<ConqueredGameEntry> remaining = new ArrayList<>();
+        for (ConqueredGameEntry item : existingEntries) {
+            if (item != null && entryId.equals(item.getId()) && removed == null) {
+                removed = item;
+            } else if (item != null) {
+                remaining.add(item);
+            }
+        }
+
+        if (removed == null) {
+            return ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "message", "Conquered game entry not found."
+            ));
+        }
+
+        participant.setConqueredGames(remaining);
+
+        if (removed.getLibraryGameId() != null && !removed.getLibraryGameId().isEmpty()) {
+            String removedGid = removed.getLibraryGameId();
+            boolean stillInConquered = remaining.stream()
+                    .anyMatch(e -> removedGid.equals(e.getLibraryGameId()));
+            boolean playedInMeetup = registrationRepository.findByParticipantId(id).stream()
+                    .anyMatch(r -> r.getGamesPlayed() != null && r.getGamesPlayed().contains(removedGid));
+            if (!stillInConquered && !playedInMeetup) {
+                List<String> nextPlayed = new ArrayList<>(
+                        participant.getGamesPlayedIds() != null ? participant.getGamesPlayedIds() : Collections.emptyList()
+                );
+                nextPlayed.removeIf(removedGid::equals);
+                participant.setGamesPlayedIds(nextPlayed);
+            }
+        }
+
+        participant.setUpdatedAt(Instant.now().toString());
+        Participant saved = participantRepository.save(participant);
+        List<Game> allGames = gameRepository.findAll();
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("success", true);
+        resp.put("entryId", entryId);
+        resp.put("participant", saved);
+        resp.put("passport", buildPassportSummary(saved, allGames));
+        return ResponseEntity.ok(resp);
+    }
+
+    private boolean canAccessParticipant(String targetParticipantId, HttpServletRequest request) {
+        if (isAdmin(request)) return true;
+        Optional<Participant> self = resolveCallerParticipant(request);
+        return self.isPresent() && targetParticipantId.equals(self.get().getId());
+    }
+
+    private String normalizeGameTitle(String name) {
+        if (name == null) return "";
+        return name.toLowerCase(Locale.ROOT)
+                .trim()
+                .replaceAll("[:'’\".,!?()-]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private Game matchLibraryGame(String rawName, String libraryGameId, List<Game> allGames) {
+        if (allGames == null || allGames.isEmpty()) return null;
+        if (libraryGameId != null && !libraryGameId.trim().isEmpty()) {
+            String targetId = libraryGameId.trim();
+            for (Game g : allGames) {
+                if (targetId.equals(g.getId())) return g;
+            }
+        }
+        String clean = rawName != null ? rawName.trim().toLowerCase(Locale.ROOT) : "";
+        if (clean.isEmpty()) return null;
+        for (Game g : allGames) {
+            if (g.getName() != null && g.getName().trim().toLowerCase(Locale.ROOT).equals(clean)) {
+                return g;
+            }
+        }
+        String norm = normalizeGameTitle(rawName);
+        if (norm.isEmpty()) return null;
+        for (Game g : allGames) {
+            if (g.getName() != null && normalizeGameTitle(g.getName()).equals(norm)) {
+                return g;
+            }
+        }
+        return null;
+    }
+
+    private ConqueredGameEntry normalizeConqueredEntry(ConqueredGameEntry raw, List<Game> allGames, String fallbackTimestamp) {
+        String cleanName = raw.getName() != null ? raw.getName().trim() : "";
+        Game matchedLib = matchLibraryGame(cleanName, raw.getLibraryGameId(), allGames);
+
+        ConqueredGameEntry entry = new ConqueredGameEntry();
+        entry.setId(raw.getId() != null && !raw.getId().trim().isEmpty()
+                ? raw.getId().trim()
+                : "cg-" + UUID.randomUUID().toString().substring(0, 8));
+        entry.setName(matchedLib != null && matchedLib.getName() != null ? matchedLib.getName() : cleanName);
+
+        String genre = raw.getGenre() != null && !raw.getGenre().trim().isEmpty()
+                ? raw.getGenre().trim()
+                : (matchedLib != null && matchedLib.getCategory() != null ? matchedLib.getCategory() : "Strategy");
+        String players = raw.getPlayers() != null && !raw.getPlayers().trim().isEmpty()
+                ? raw.getPlayers().trim()
+                : (matchedLib != null && matchedLib.getPlayers() != null ? matchedLib.getPlayers() : "2-4 Players");
+        String duration = raw.getDuration() != null && !raw.getDuration().trim().isEmpty()
+                ? raw.getDuration().trim()
+                : (matchedLib != null && matchedLib.getDuration() != null ? matchedLib.getDuration() : "45-60 mins");
+
+        entry.setGenre(genre);
+        entry.setPlayers(players);
+        entry.setDuration(duration);
+        entry.setDatePlayed(raw.getDatePlayed() != null && !raw.getDatePlayed().trim().isEmpty()
+                ? raw.getDatePlayed().trim()
+                : LocalDate.now().toString());
+        entry.setNotes(raw.getNotes() != null ? raw.getNotes().trim() : "");
+        entry.setLibraryGameId(matchedLib != null ? matchedLib.getId() : null);
+        entry.setSource(matchedLib != null ? "social_shuffle" : "outside");
+        entry.setCreatedAt(raw.getCreatedAt() != null && !raw.getCreatedAt().trim().isEmpty()
+                ? raw.getCreatedAt().trim()
+                : fallbackTimestamp);
+        return entry;
+    }
+
+    private void incrementNewlyPlayedLibraryGames(Set<String> previousPlayedIds,
+                                                  List<String> updatedPlayedIds,
+                                                  List<Game> allGames,
+                                                  String now) {
+        if (updatedPlayedIds == null || updatedPlayedIds.isEmpty() || allGames == null || allGames.isEmpty()) {
+            return;
+        }
+        Map<String, Game> gameById = new HashMap<>();
+        for (Game g : allGames) {
+            if (g.getId() != null) gameById.put(g.getId(), g);
+        }
+        boolean anyChanged = false;
+        for (String gid : updatedPlayedIds) {
+            if (gid != null && !previousPlayedIds.contains(gid)) {
+                Game g = gameById.get(gid);
+                if (g != null) {
+                    g.setPlaysCount(Math.max(0, g.getPlaysCount()) + 1);
+                    g.setUpdatedAt(now);
+                    gameRepository.save(g);
+                    anyChanged = true;
+                }
+            }
+        }
+        if (anyChanged && cacheManager != null) {
+            Cache gamesCache = cacheManager.getCache("games");
+            if (gamesCache != null) gamesCache.clear();
+            Cache statsCache = cacheManager.getCache("communityStats");
+            if (statsCache != null) statsCache.clear();
+        }
+    }
+
+    private Map<String, Object> buildPassportSummary(Participant participant, List<Game> allGames) {
+        Set<String> playedLibraryIdSet = new LinkedHashSet<>(
+                participant.getGamesPlayedIds() != null ? participant.getGamesPlayedIds() : Collections.emptyList()
+        );
+        Set<String> outsideNormalizedNames = new LinkedHashSet<>();
+
+        List<ConqueredGameEntry> conqueredGames = participant.getConqueredGames() != null
+                ? participant.getConqueredGames()
+                : Collections.emptyList();
+
+        for (ConqueredGameEntry entry : conqueredGames) {
+            if (entry == null || entry.getName() == null || entry.getName().trim().isEmpty()) continue;
+            Game matchedLib = matchLibraryGame(entry.getName(), entry.getLibraryGameId(), allGames);
+            if (matchedLib != null) {
+                playedLibraryIdSet.add(matchedLib.getId());
+            } else {
+                String norm = normalizeGameTitle(entry.getName());
+                if (!norm.isEmpty()) outsideNormalizedNames.add(norm);
+            }
+        }
+
+        int socialShufflePlayedCount = 0;
+        for (Game g : allGames) {
+            if (playedLibraryIdSet.contains(g.getId())) {
+                socialShufflePlayedCount++;
+            }
+        }
+        int overallConqueredCount = socialShufflePlayedCount + outsideNormalizedNames.size();
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("participantId", participant.getId());
+        summary.put("name", participant.getName());
+        summary.put("overallConqueredCount", overallConqueredCount);
+        summary.put("socialShufflePlayedCount", socialShufflePlayedCount);
+        summary.put("socialShuffleLibraryTotal", allGames.size());
+        summary.put("conqueredGames", conqueredGames);
+        summary.put("gamesPlayedIds", new ArrayList<>(playedLibraryIdSet));
+        return summary;
     }
 
     @DeleteMapping("/{id}")
@@ -258,6 +678,18 @@ public class ParticipantController {
         Set<String> games = new HashSet<>(target.getGamesPlayedIds());
         games.addAll(source.getGamesPlayedIds());
         target.setGamesPlayedIds(new ArrayList<>(games));
+
+        List<ConqueredGameEntry> mergedConquered = new ArrayList<>(target.getConqueredGames());
+        Set<String> existingEntryIds = new HashSet<>();
+        for (ConqueredGameEntry entry : mergedConquered) {
+            if (entry.getId() != null) existingEntryIds.add(entry.getId());
+        }
+        for (ConqueredGameEntry entry : source.getConqueredGames()) {
+            if (entry.getId() == null || !existingEntryIds.contains(entry.getId())) {
+                mergedConquered.add(entry);
+            }
+        }
+        target.setConqueredGames(mergedConquered);
 
         Set<String> venues = new HashSet<>(target.getVenuesVisited());
         venues.addAll(source.getVenuesVisited());

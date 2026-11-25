@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS participants (
     total_events_attended INTEGER DEFAULT 0,
     total_registrations INTEGER DEFAULT 0,
     games_played_ids TEXT,
+    conquered_games TEXT DEFAULT '[]',
     venues_visited TEXT,
     total_pax_brought INTEGER DEFAULT 0,
     last_attended_event_id VARCHAR(64),

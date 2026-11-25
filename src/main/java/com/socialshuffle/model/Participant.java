@@ -1,6 +1,7 @@
 package com.socialshuffle.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.socialshuffle.converter.ConqueredGameListConverter;
 import com.socialshuffle.converter.StringListConverter;
 import jakarta.persistence.*;
 import java.io.Serializable;
@@ -59,6 +60,10 @@ public class Participant implements Serializable {
     @Convert(converter = StringListConverter.class)
     @Column(name = "games_played_ids", columnDefinition = "TEXT")
     private List<String> gamesPlayedIds = new ArrayList<>();
+
+    @Convert(converter = ConqueredGameListConverter.class)
+    @Column(name = "conquered_games", columnDefinition = "TEXT")
+    private List<ConqueredGameEntry> conqueredGames = new ArrayList<>();
 
     @Convert(converter = StringListConverter.class)
     @Column(name = "venues_visited", columnDefinition = "TEXT")
@@ -183,6 +188,14 @@ public class Participant implements Serializable {
 
     public void setGamesPlayedIds(List<String> gamesPlayedIds) {
         this.gamesPlayedIds = gamesPlayedIds != null ? gamesPlayedIds : new ArrayList<>();
+    }
+
+    public List<ConqueredGameEntry> getConqueredGames() {
+        return conqueredGames;
+    }
+
+    public void setConqueredGames(List<ConqueredGameEntry> conqueredGames) {
+        this.conqueredGames = conqueredGames != null ? conqueredGames : new ArrayList<>();
     }
 
     public List<String> getVenuesVisited() {

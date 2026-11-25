@@ -87,7 +87,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (path.startsWith("/api/venues") && !"GET".equalsIgnoreCase(method)) return true;
 
         if (path.startsWith("/api/participants")) {
-            if ("POST".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method)) return true;
+            if (!path.contains("/passport") && ("POST".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method))) return true;
             if (path.startsWith("/api/participants/check-duplicate") || path.startsWith("/api/participants/merge")) return true;
         }
 

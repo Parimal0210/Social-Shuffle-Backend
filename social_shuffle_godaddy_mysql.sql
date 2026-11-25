@@ -74,6 +74,7 @@ CREATE TABLE `participants` (
   `total_events_attended` INT DEFAULT 0,
   `total_registrations` INT DEFAULT 0,
   `games_played_ids` TEXT DEFAULT NULL,
+  `conquered_games` TEXT DEFAULT NULL,
   `venues_visited` TEXT DEFAULT NULL,
   `total_pax_brought` INT DEFAULT 0,
   `last_attended_event_id` VARCHAR(64) DEFAULT NULL,

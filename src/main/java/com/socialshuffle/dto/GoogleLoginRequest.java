@@ -13,6 +13,7 @@ public class GoogleLoginRequest implements Serializable {
     private String area;
     private String googleId;
     private String idToken;
+    private String firebaseIdToken;
     private String accessToken;
     private String bio;
 
@@ -39,6 +40,9 @@ public class GoogleLoginRequest implements Serializable {
 
     public String getIdToken() { return idToken; }
     public void setIdToken(String idToken) { this.idToken = idToken; }
+
+    public String getFirebaseIdToken() { return firebaseIdToken; }
+    public void setFirebaseIdToken(String firebaseIdToken) { this.firebaseIdToken = firebaseIdToken; }
 
     public String getAccessToken() { return accessToken; }
     public void setAccessToken(String accessToken) { this.accessToken = accessToken; }
