@@ -2,10 +2,13 @@ package com.socialshuffle.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.socialshuffle.model.BoardGameCatalogItem;
+import com.socialshuffle.repository.BoardGameCatalogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -16,7 +19,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.sql.PreparedStatement;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.*;
@@ -32,6 +37,8 @@ public class BoardGameCatalogService {
     private static final Pattern NUMERIC_ENTITY_PATTERN = Pattern.compile("&#(\\d+);");
 
     private final ObjectMapper objectMapper;
+    private final BoardGameCatalogRepository catalogRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final HttpClient httpClient;
 
     private volatile List<CatalogEntry> catalogCache = Collections.emptyList();
@@ -61,8 +68,12 @@ public class BoardGameCatalogService {
             long cachedAt
     ) {}
 
-    public BoardGameCatalogService(ObjectMapper objectMapper) {
+    public BoardGameCatalogService(ObjectMapper objectMapper,
+                                   BoardGameCatalogRepository catalogRepository,
+                                   JdbcTemplate jdbcTemplate) {
         this.objectMapper = objectMapper;
+        this.catalogRepository = catalogRepository;
+        this.jdbcTemplate = jdbcTemplate;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(6))
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -73,6 +84,7 @@ public class BoardGameCatalogService {
     @EventListener(ApplicationReadyEvent.class)
     public void warmOnStartup() {
         try {
+            loadFromDatabaseIfEmpty();
             refreshCatalogIfNeeded(true);
         } catch (Exception e) {
             log.warn("Initial daily board game catalog warm-up deferred: {}", e.getMessage());
@@ -190,13 +202,62 @@ public class BoardGameCatalogService {
             String genre = mapExternalGenre(categories, subdomains);
             GameDetails resolved = new GameDetails(genre, players, duration);
             detailsCache.put(externalId, new CachedDetails(resolved, System.currentTimeMillis()));
+            persistVerifiedSpecsToDb(externalId, resolved);
             return resolved;
         } catch (Exception e) {
             return fallback;
         }
     }
 
+    private void loadFromDatabaseIfEmpty() {
+        if (!catalogCache.isEmpty()) return;
+        try {
+            List<BoardGameCatalogItem> dbRows = catalogRepository.findAllByOrderByBggRankAsc();
+            if (!dbRows.isEmpty()) {
+                List<CatalogEntry> loaded = new ArrayList<>(dbRows.size());
+                String latestDate = "";
+                for (BoardGameCatalogItem row : dbRows) {
+                    if (row.getName() == null || row.getName().isBlank()) continue;
+                    loaded.add(new CatalogEntry(
+                            row.getName(),
+                            row.getGenre() != null ? row.getGenre() : "Strategy",
+                            row.getPlayers() != null ? row.getPlayers() : "2-4 Players",
+                            row.getDuration() != null ? row.getDuration() : "45-60 mins",
+                            row.getExternalId(),
+                            row.getBggRank()
+                    ));
+                    if (latestDate.isEmpty() && row.getSnapshotDate() != null) {
+                        latestDate = row.getSnapshotDate();
+                    }
+                    if (row.isHasVerifiedSpecs() && row.getExternalId() != null && !row.getExternalId().isBlank()) {
+                        detailsCache.put(
+                                row.getExternalId(),
+                                new CachedDetails(
+                                        new GameDetails(
+                                                row.getGenre() != null ? row.getGenre() : "Strategy",
+                                                row.getPlayers() != null ? row.getPlayers() : "2-4 Players",
+                                                row.getDuration() != null ? row.getDuration() : "45-60 mins"
+                                        ),
+                                        System.currentTimeMillis()
+                                )
+                        );
+                    }
+                }
+                if (!loaded.isEmpty()) {
+                    catalogCache = Collections.unmodifiableList(loaded);
+                    if (catalogUpdatedDate.isEmpty()) catalogUpdatedDate = latestDate;
+                    log.info("Loaded {} board games from Supabase board_game_catalog", loaded.size());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not hydrate board_game_catalog from database: {}", e.getMessage());
+        }
+    }
+
     private void refreshCatalogIfNeeded(boolean force) {
+        if (!force && catalogCache.isEmpty()) {
+            loadFromDatabaseIfEmpty();
+        }
         long now = System.currentTimeMillis();
         if (!force && !catalogCache.isEmpty() && (now - catalogCachedAt) < CATALOG_TTL_MS) {
             return;
@@ -232,12 +293,87 @@ public class BoardGameCatalogService {
 
             if (!merged.isEmpty()) {
                 catalogCache = Collections.unmodifiableList(merged);
-                catalogUpdatedDate = resolvedDate;
+                catalogUpdatedDate = resolvedDate.isEmpty() ? LocalDate.now(ZoneOffset.UTC).toString() : resolvedDate;
                 catalogCachedAt = System.currentTimeMillis();
+                persistCatalogToDatabase(merged, catalogUpdatedDate);
                 log.info("Synced {} daily ranked board games (snapshot: {})",
-                        merged.size(), resolvedDate.isEmpty() ? "live" : resolvedDate);
+                        merged.size(), catalogUpdatedDate);
             }
         }
+    }
+
+    private void persistCatalogToDatabase(List<CatalogEntry> entries, String snapshotDate) {
+        try {
+            String now = Instant.now().toString();
+            String sql = """
+                    INSERT INTO board_game_catalog
+                        (id, external_id, name, normalized_name, genre, players, duration, bgg_rank, has_verified_specs, snapshot_date, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, FALSE, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        external_id = COALESCE(EXCLUDED.external_id, board_game_catalog.external_id),
+                        name = EXCLUDED.name,
+                        normalized_name = EXCLUDED.normalized_name,
+                        bgg_rank = EXCLUDED.bgg_rank,
+                        snapshot_date = EXCLUDED.snapshot_date,
+                        updated_at = EXCLUDED.updated_at,
+                        genre = CASE WHEN board_game_catalog.has_verified_specs THEN board_game_catalog.genre ELSE EXCLUDED.genre END,
+                        players = CASE WHEN board_game_catalog.has_verified_specs THEN board_game_catalog.players ELSE EXCLUDED.players END,
+                        duration = CASE WHEN board_game_catalog.has_verified_specs THEN board_game_catalog.duration ELSE EXCLUDED.duration END
+                    """;
+
+            final int batchSize = 1000;
+            List<CatalogEntry> batch = new ArrayList<>(batchSize);
+            for (CatalogEntry entry : entries) {
+                batch.add(entry);
+                if (batch.size() >= batchSize) {
+                    executeCatalogBatch(sql, batch, snapshotDate, now);
+                    batch.clear();
+                }
+            }
+            if (!batch.isEmpty()) {
+                executeCatalogBatch(sql, batch, snapshotDate, now);
+            }
+        } catch (Exception e) {
+            log.warn("Skipped persisting board_game_catalog batch: {}", e.getMessage());
+        }
+    }
+
+    private void executeCatalogBatch(String sql, List<CatalogEntry> batch, String snapshotDate, String now) {
+        jdbcTemplate.batchUpdate(sql, batch, batch.size(), (PreparedStatement ps, CatalogEntry entry) -> {
+            String norm = entry.name().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
+            String rowId = (entry.externalId() != null && !entry.externalId().isBlank())
+                    ? "bgg-" + entry.externalId()
+                    : "slug-" + Integer.toHexString(norm.hashCode());
+            ps.setString(1, truncate(rowId, 64));
+            ps.setString(2, entry.externalId());
+            ps.setString(3, truncate(entry.name(), 255));
+            ps.setString(4, truncate(norm, 255));
+            ps.setString(5, truncate(entry.genre(), 100));
+            ps.setString(6, truncate(entry.players(), 64));
+            ps.setString(7, truncate(entry.duration(), 64));
+            ps.setInt(8, entry.rank());
+            ps.setString(9, truncate(snapshotDate, 32));
+            ps.setString(10, now);
+        });
+    }
+
+    private void persistVerifiedSpecsToDb(String externalId, GameDetails details) {
+        try {
+            catalogRepository.findFirstByExternalId(externalId).ifPresent(item -> {
+                item.setGenre(truncate(details.genre(), 100));
+                item.setPlayers(truncate(details.players(), 64));
+                item.setDuration(truncate(details.duration(), 64));
+                item.setHasVerifiedSpecs(true);
+                item.setUpdatedAt(Instant.now().toString());
+                catalogRepository.save(item);
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String truncate(String val, int maxLen) {
+        if (val == null) return null;
+        return val.length() <= maxLen ? val : val.substring(0, maxLen);
     }
 
     private record SnapshotResult(List<CatalogEntry> games, String snapshotDate) {}

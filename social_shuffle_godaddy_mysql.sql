@@ -322,6 +322,57 @@ CREATE TABLE `notifications` (
   KEY `idx_notif_event` (`event_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ------------------------------------------------------------------------------
+-- 15. Table structure for table `participant_conquered_games`
+-- Normalized Personal Board Gaming Passport game log entries
+-- ------------------------------------------------------------------------------
+DROP TABLE IF EXISTS `participant_conquered_games`;
+CREATE TABLE `participant_conquered_games` (
+  `id` VARCHAR(64) NOT NULL,
+  `participant_id` VARCHAR(64) NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `normalized_name` VARCHAR(255) NOT NULL,
+  `genre` VARCHAR(100) DEFAULT 'Strategy',
+  `players` VARCHAR(64) DEFAULT '2-4 Players',
+  `duration` VARCHAR(64) DEFAULT '45-60 mins',
+  `date_played` VARCHAR(50) DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL,
+  `library_game_id` VARCHAR(64) DEFAULT NULL,
+  `source` VARCHAR(40) DEFAULT 'outside',
+  `created_at` VARCHAR(50) DEFAULT NULL,
+  `updated_at` VARCHAR(50) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_pcg_participant` (`participant_id`),
+  KEY `idx_pcg_library_game` (`library_game_id`),
+  KEY `idx_pcg_genre` (`genre`),
+  KEY `idx_pcg_source` (`source`),
+  KEY `idx_pcg_norm_name` (`normalized_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------------------------
+-- 16. Table structure for table `board_game_catalog`
+-- Daily-synced ranked board game auto-suggestion catalog & verified specs
+-- ------------------------------------------------------------------------------
+DROP TABLE IF EXISTS `board_game_catalog`;
+CREATE TABLE `board_game_catalog` (
+  `id` VARCHAR(64) NOT NULL,
+  `external_id` VARCHAR(64) DEFAULT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `normalized_name` VARCHAR(255) NOT NULL,
+  `genre` VARCHAR(100) DEFAULT 'Strategy',
+  `players` VARCHAR(64) DEFAULT '2-4 Players',
+  `duration` VARCHAR(64) DEFAULT '45-60 mins',
+  `bgg_rank` INT DEFAULT 99999,
+  `has_verified_specs` TINYINT(1) DEFAULT 0,
+  `snapshot_date` VARCHAR(32) DEFAULT NULL,
+  `updated_at` VARCHAR(50) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_bgc_norm_name` (`normalized_name`),
+  KEY `idx_bgc_external_id` (`external_id`),
+  KEY `idx_bgc_rank` (`bgg_rank`),
+  KEY `idx_bgc_snapshot_date` (`snapshot_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ==============================================================================
 -- INITIAL SEED DATA (FETCHED DIRECTLY FROM DATABASE TABLES ONLY)
 -- ==============================================================================

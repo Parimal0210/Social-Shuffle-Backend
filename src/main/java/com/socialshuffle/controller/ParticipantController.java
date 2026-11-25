@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.socialshuffle.model.ConqueredGameEntry;
 import com.socialshuffle.model.Game;
 import com.socialshuffle.model.Participant;
+import com.socialshuffle.model.ParticipantConqueredGame;
 import com.socialshuffle.model.User;
 import com.socialshuffle.repository.*;
 import com.socialshuffle.security.AuthInterceptor;
@@ -32,6 +33,7 @@ public class ParticipantController {
     private final ParticipantBadgeRepository participantBadgeRepository;
     private final GoogleUserRepository googleUserRepository;
     private final GameRepository gameRepository;
+    private final ParticipantConqueredGameRepository participantConqueredGameRepository;
     private final CacheManager cacheManager;
     private static final ObjectMapper objectMapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -43,6 +45,7 @@ public class ParticipantController {
                                  ParticipantBadgeRepository participantBadgeRepository,
                                  GoogleUserRepository googleUserRepository,
                                  GameRepository gameRepository,
+                                 ParticipantConqueredGameRepository participantConqueredGameRepository,
                                  CacheManager cacheManager) {
         this.participantRepository = participantRepository;
         this.registrationRepository = registrationRepository;
@@ -51,6 +54,7 @@ public class ParticipantController {
         this.participantBadgeRepository = participantBadgeRepository;
         this.googleUserRepository = googleUserRepository;
         this.gameRepository = gameRepository;
+        this.participantConqueredGameRepository = participantConqueredGameRepository;
         this.cacheManager = cacheManager;
     }
 
@@ -228,6 +232,9 @@ public class ParticipantController {
 
         existing.setUpdatedAt(now);
         Participant saved = participantRepository.save(existing);
+        if (updates.get("conqueredGames") instanceof List<?>) {
+            syncParticipantConqueredGamesTable(saved.getId(), saved.getConqueredGames(), now);
+        }
 
         // Keep linked user & user_credentials records synchronized
         if (saved.getEmail() != null && !saved.getEmail().isEmpty()) {
@@ -311,6 +318,7 @@ public class ParticipantController {
 
         incrementNewlyPlayedLibraryGames(previousPlayedIds, participant.getGamesPlayedIds(), allGames, now);
         Participant saved = participantRepository.save(participant);
+        syncParticipantConqueredGamesTable(saved.getId(), saved.getConqueredGames(), now);
 
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("success", true);
@@ -392,6 +400,7 @@ public class ParticipantController {
 
         incrementNewlyPlayedLibraryGames(previousPlayedIds, participant.getGamesPlayedIds(), allGames, now);
         Participant saved = participantRepository.save(participant);
+        syncParticipantConqueredGamesTable(saved.getId(), saved.getConqueredGames(), now);
 
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("success", true);
@@ -456,8 +465,10 @@ public class ParticipantController {
             }
         }
 
-        participant.setUpdatedAt(Instant.now().toString());
+        String now = Instant.now().toString();
+        participant.setUpdatedAt(now);
         Participant saved = participantRepository.save(participant);
+        syncParticipantConqueredGamesTable(saved.getId(), saved.getConqueredGames(), now);
         List<Game> allGames = gameRepository.findAll();
 
         Map<String, Object> resp = new LinkedHashMap<>();
@@ -614,6 +625,44 @@ public class ParticipantController {
         return summary;
     }
 
+    private void syncParticipantConqueredGamesTable(String participantId,
+                                                    List<ConqueredGameEntry> entries,
+                                                    String now) {
+        if (participantId == null || participantId.isEmpty()) return;
+        try {
+            participantConqueredGameRepository.deleteByParticipantId(participantId);
+            if (entries == null || entries.isEmpty()) return;
+            List<ParticipantConqueredGame> rows = new ArrayList<>(entries.size());
+            Set<String> seenIds = new HashSet<>();
+            for (ConqueredGameEntry e : entries) {
+                if (e == null || e.getName() == null || e.getName().trim().isEmpty()) continue;
+                String rowId = (e.getId() != null && !e.getId().trim().isEmpty())
+                        ? e.getId().trim()
+                        : "cg-" + UUID.randomUUID().toString().substring(0, 8);
+                if (!seenIds.add(rowId)) continue;
+                ParticipantConqueredGame row = new ParticipantConqueredGame();
+                row.setId(rowId);
+                row.setParticipantId(participantId);
+                row.setName(e.getName().trim());
+                row.setNormalizedName(normalizeGameTitle(e.getName()));
+                row.setGenre(e.getGenre() != null && !e.getGenre().trim().isEmpty() ? e.getGenre().trim() : "Strategy");
+                row.setPlayers(e.getPlayers() != null && !e.getPlayers().trim().isEmpty() ? e.getPlayers().trim() : "2-4 Players");
+                row.setDuration(e.getDuration() != null && !e.getDuration().trim().isEmpty() ? e.getDuration().trim() : "45-60 mins");
+                row.setDatePlayed(e.getDatePlayed() != null && !e.getDatePlayed().trim().isEmpty() ? e.getDatePlayed().trim() : LocalDate.now().toString());
+                row.setNotes(e.getNotes() != null ? e.getNotes().trim() : "");
+                row.setLibraryGameId(e.getLibraryGameId());
+                row.setSource(e.getSource() != null && !e.getSource().trim().isEmpty() ? e.getSource().trim() : "outside");
+                row.setCreatedAt(e.getCreatedAt() != null && !e.getCreatedAt().trim().isEmpty() ? e.getCreatedAt().trim() : now);
+                row.setUpdatedAt(now);
+                rows.add(row);
+            }
+            if (!rows.isEmpty()) {
+                participantConqueredGameRepository.saveAll(rows);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     @DeleteMapping("/{id}")
     @Transactional
     public ResponseEntity<?> deleteParticipant(@PathVariable String id) {
@@ -624,6 +673,7 @@ public class ParticipantController {
         Participant p = opt.get();
         String email = p.getEmail() != null ? p.getEmail().trim().toLowerCase() : "";
 
+        participantConqueredGameRepository.deleteByParticipantId(id);
         participantBadgeRepository.deleteByParticipantId(id);
         registrationRepository.deleteByParticipantId(id);
         googleUserRepository.deleteByParticipantIdOrEmail(id, email);
@@ -694,9 +744,12 @@ public class ParticipantController {
         Set<String> venues = new HashSet<>(target.getVenuesVisited());
         venues.addAll(source.getVenuesVisited());
         target.setVenuesVisited(new ArrayList<>(venues));
-        target.setUpdatedAt(Instant.now().toString());
+        String now = Instant.now().toString();
+        target.setUpdatedAt(now);
 
         participantRepository.save(target);
+        syncParticipantConqueredGamesTable(targetId, target.getConqueredGames(), now);
+        participantConqueredGameRepository.deleteByParticipantId(sourceId);
 
         registrationRepository.reassignParticipantRegistrations(sourceId, targetId);
         participantBadgeRepository.deleteByParticipantId(sourceId);

@@ -432,6 +432,55 @@ CREATE TABLE IF NOT EXISTS app_configs (
     updated_by VARCHAR(150)
 );
 
+-- ------------------------------------------------------------------------------
+-- 20. Table structure for table: participant_conquered_games
+-- Normalized Personal Board Gaming Passport game log entries
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS participant_conquered_games (
+    id VARCHAR(64) PRIMARY KEY,
+    participant_id VARCHAR(64) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    normalized_name VARCHAR(255) NOT NULL,
+    genre VARCHAR(100) DEFAULT 'Strategy',
+    players VARCHAR(64) DEFAULT '2-4 Players',
+    duration VARCHAR(64) DEFAULT '45-60 mins',
+    date_played VARCHAR(50),
+    notes TEXT,
+    library_game_id VARCHAR(64),
+    source VARCHAR(40) DEFAULT 'outside',
+    created_at VARCHAR(50),
+    updated_at VARCHAR(50)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pcg_participant ON participant_conquered_games (participant_id);
+CREATE INDEX IF NOT EXISTS idx_pcg_library_game ON participant_conquered_games (library_game_id);
+CREATE INDEX IF NOT EXISTS idx_pcg_genre ON participant_conquered_games (genre);
+CREATE INDEX IF NOT EXISTS idx_pcg_source ON participant_conquered_games (source);
+CREATE INDEX IF NOT EXISTS idx_pcg_norm_name ON participant_conquered_games (normalized_name);
+
+-- ------------------------------------------------------------------------------
+-- 21. Table structure for table: board_game_catalog
+-- Daily-synced ranked board game auto-suggestion catalog & verified specs
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS board_game_catalog (
+    id VARCHAR(64) PRIMARY KEY,
+    external_id VARCHAR(64),
+    name VARCHAR(255) NOT NULL,
+    normalized_name VARCHAR(255) NOT NULL,
+    genre VARCHAR(100) DEFAULT 'Strategy',
+    players VARCHAR(64) DEFAULT '2-4 Players',
+    duration VARCHAR(64) DEFAULT '45-60 mins',
+    bgg_rank INTEGER DEFAULT 99999,
+    has_verified_specs BOOLEAN DEFAULT FALSE,
+    snapshot_date VARCHAR(32),
+    updated_at VARCHAR(50)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bgc_norm_name ON board_game_catalog (normalized_name);
+CREATE INDEX IF NOT EXISTS idx_bgc_external_id ON board_game_catalog (external_id);
+CREATE INDEX IF NOT EXISTS idx_bgc_rank ON board_game_catalog (bgg_rank);
+CREATE INDEX IF NOT EXISTS idx_bgc_snapshot_date ON board_game_catalog (snapshot_date);
+
 -- Additional high-speed lookup indexes on registrations
 CREATE INDEX IF NOT EXISTS idx_reg_email ON registrations (participant_email);
 CREATE INDEX IF NOT EXISTS idx_reg_event_status ON registrations (event_id, attendance_status);
@@ -919,6 +968,8 @@ ALTER TABLE public.community_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.google_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.otp_verifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_configs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.participant_conquered_games ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.board_game_catalog ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
