@@ -32,12 +32,6 @@ public class ParticipantConqueredGame implements Serializable {
     @Column(name = "genre", length = 100)
     private String genre;
 
-    @Column(name = "players", length = 64)
-    private String players;
-
-    @Column(name = "duration", length = 64)
-    private String duration;
-
     @Column(name = "date_played", length = 50)
     private String datePlayed;
 
@@ -97,22 +91,6 @@ public class ParticipantConqueredGame implements Serializable {
 
     public void setGenre(String genre) {
         this.genre = genre;
-    }
-
-    public String getPlayers() {
-        return players;
-    }
-
-    public void setPlayers(String players) {
-        this.players = players;
-    }
-
-    public String getDuration() {
-        return duration;
-    }
-
-    public void setDuration(String duration) {
-        this.duration = duration;
     }
 
     public String getDatePlayed() {

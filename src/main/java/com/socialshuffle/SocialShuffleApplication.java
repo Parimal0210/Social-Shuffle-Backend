@@ -49,7 +49,6 @@ public class SocialShuffleApplication {
                 "games",
                 "venues",
                 "admins",
-                "badgeLevels",
                 "communityStats"
         );
     }

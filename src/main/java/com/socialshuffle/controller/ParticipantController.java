@@ -30,7 +30,6 @@ public class ParticipantController {
     private final RegistrationRepository registrationRepository;
     private final UserRepository userRepository;
     private final UserCredentialRepository userCredentialRepository;
-    private final ParticipantBadgeRepository participantBadgeRepository;
     private final GoogleUserRepository googleUserRepository;
     private final GameRepository gameRepository;
     private final ParticipantConqueredGameRepository participantConqueredGameRepository;
@@ -42,7 +41,6 @@ public class ParticipantController {
                                  RegistrationRepository registrationRepository,
                                  UserRepository userRepository,
                                  UserCredentialRepository userCredentialRepository,
-                                 ParticipantBadgeRepository participantBadgeRepository,
                                  GoogleUserRepository googleUserRepository,
                                  GameRepository gameRepository,
                                  ParticipantConqueredGameRepository participantConqueredGameRepository,
@@ -51,7 +49,6 @@ public class ParticipantController {
         this.registrationRepository = registrationRepository;
         this.userRepository = userRepository;
         this.userCredentialRepository = userCredentialRepository;
-        this.participantBadgeRepository = participantBadgeRepository;
         this.googleUserRepository = googleUserRepository;
         this.gameRepository = gameRepository;
         this.participantConqueredGameRepository = participantConqueredGameRepository;
@@ -646,8 +643,6 @@ public class ParticipantController {
                 row.setName(e.getName().trim());
                 row.setNormalizedName(normalizeGameTitle(e.getName()));
                 row.setGenre(e.getGenre() != null && !e.getGenre().trim().isEmpty() ? e.getGenre().trim() : "Strategy");
-                row.setPlayers(e.getPlayers() != null && !e.getPlayers().trim().isEmpty() ? e.getPlayers().trim() : "2-4 Players");
-                row.setDuration(e.getDuration() != null && !e.getDuration().trim().isEmpty() ? e.getDuration().trim() : "45-60 mins");
                 row.setDatePlayed(e.getDatePlayed() != null && !e.getDatePlayed().trim().isEmpty() ? e.getDatePlayed().trim() : LocalDate.now().toString());
                 row.setNotes(e.getNotes() != null ? e.getNotes().trim() : "");
                 row.setLibraryGameId(e.getLibraryGameId());
@@ -674,7 +669,6 @@ public class ParticipantController {
         String email = p.getEmail() != null ? p.getEmail().trim().toLowerCase() : "";
 
         participantConqueredGameRepository.deleteByParticipantId(id);
-        participantBadgeRepository.deleteByParticipantId(id);
         registrationRepository.deleteByParticipantId(id);
         googleUserRepository.deleteByParticipantIdOrEmail(id, email);
         userCredentialRepository.deleteBySubjectIdOrEmail(id, email);
@@ -752,7 +746,6 @@ public class ParticipantController {
         participantConqueredGameRepository.deleteByParticipantId(sourceId);
 
         registrationRepository.reassignParticipantRegistrations(sourceId, targetId);
-        participantBadgeRepository.deleteByParticipantId(sourceId);
         String sourceEmail = source.getEmail() != null ? source.getEmail().trim().toLowerCase() : "";
         userCredentialRepository.deleteBySubjectIdOrEmail(sourceId, sourceEmail);
         googleUserRepository.deleteByParticipantIdOrEmail(sourceId, sourceEmail);

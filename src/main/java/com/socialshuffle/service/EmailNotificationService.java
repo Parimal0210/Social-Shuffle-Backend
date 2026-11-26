@@ -321,7 +321,7 @@ public class EmailNotificationService {
                     + "<table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background-color:#1A255C;border:1px solid #283677;border-radius:12px;margin-bottom:16px;'>"
                     + buildDetailRow("Weekend Meetups", "RSVP across Koregaon Park, Baner, Viman Nagar & FC Road", "#FF751F")
                     + buildDetailRow("Digital Check-In", "Instant QR pass issued automatically for every registration", "#4AB4A4")
-                    + buildDetailRow("Shuffler Progression", "Track games played & unlock all 10 collectible tabletop badges", "#FFD230")
+                    + buildDetailRow("Board Gaming Passport", "Track every conquered board game & your Social Shuffle progress", "#FFD230")
                     + "</table>"
                     + "<p style='margin:0;font-size:13px;color:#94A3B8;'>See you across the board this weekend!</p>";
 

@@ -188,45 +188,7 @@ CREATE INDEX IF NOT EXISTS idx_game_difficulty ON games (difficulty);
 CREATE INDEX IF NOT EXISTS idx_game_active ON games (active);
 
 -- ------------------------------------------------------------------------------
--- 8. Table structure for table: badge_levels
--- Stores the 10 badge progression tiers
--- ------------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS badge_levels (
-    level INTEGER PRIMARY KEY,
-    short_title VARCHAR(100) NOT NULL,
-    fancy_name VARCHAR(150),
-    subtitle VARCHAR(200),
-    description TEXT,
-    icon VARCHAR(20),
-    min_game_percentage INTEGER DEFAULT 0,
-    min_events_attended INTEGER DEFAULT 0,
-    rarity VARCHAR(50) DEFAULT 'Common',
-    gradient VARCHAR(255),
-    border_color VARCHAR(100),
-    text_color VARCHAR(100),
-    badge_tag_color VARCHAR(150),
-    glow_effect VARCHAR(100),
-    perks TEXT
-);
-
--- ------------------------------------------------------------------------------
--- 9. Table structure for table: participant_badges
--- ------------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS participant_badges (
-    id VARCHAR(64) PRIMARY KEY,
-    participant_id VARCHAR(64) NOT NULL,
-    badge_level INTEGER NOT NULL,
-    badge_name VARCHAR(100),
-    badge_icon VARCHAR(20),
-    earned_at VARCHAR(50),
-    is_current BOOLEAN DEFAULT FALSE
-);
-
-CREATE INDEX IF NOT EXISTS idx_part_badge_participant ON participant_badges (participant_id);
-CREATE INDEX IF NOT EXISTS idx_part_badge_level ON participant_badges (badge_level);
-
--- ------------------------------------------------------------------------------
--- 10. Table structure for table: registrations
+-- 8. Table structure for table: registrations
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS registrations (
     id VARCHAR(64) PRIMARY KEY,
@@ -442,8 +404,6 @@ CREATE TABLE IF NOT EXISTS participant_conquered_games (
     name VARCHAR(255) NOT NULL,
     normalized_name VARCHAR(255) NOT NULL,
     genre VARCHAR(100) DEFAULT 'Strategy',
-    players VARCHAR(64) DEFAULT '2-4 Players',
-    duration VARCHAR(64) DEFAULT '45-60 mins',
     date_played VARCHAR(50),
     notes TEXT,
     library_game_id VARCHAR(64),
@@ -689,188 +649,11 @@ VALUES
 )
 ON CONFLICT (id) DO NOTHING;
 
--- 7. Seed `badge_levels` (The 10 Badge Progression Tiers)
-INSERT INTO badge_levels (level, short_title, fancy_name, subtitle, description, icon, min_game_percentage, min_events_attended, rarity, gradient, border_color, text_color, badge_tag_color, glow_effect, perks)
-VALUES
-(
-    1,
-    'Novice Roller',
-    'Initiate of the Ivory Dice',
-    'The First Move',
-    'Broke the ice, rolled the initial dice, and attended their first Pune tabletop gathering.',
-    '🎲',
-    4,
-    1,
-    'Common',
-    'from-slate-800 via-purple-950/40 to-slate-900',
-    'border-slate-600/50',
-    'text-slate-300',
-    'bg-slate-700/50 text-slate-300 border-slate-600',
-    'shadow-slate-500/10',
-    '["Unlock Digital Shuffler Passport","Table Rookie Profile Badge"]'
-),
-(
-    2,
-    'Apprentice Shuffler',
-    'Acolyte of the Meeple Order',
-    'Table Apprentice',
-    'Expanded beyond the basics with multiple games tested and a verified event check-in.',
-    '♟️',
-    10,
-    1,
-    'Common',
-    'from-amber-950/30 via-slate-900 to-purple-950/30',
-    'border-amber-700/50',
-    'text-amber-300',
-    'bg-amber-900/30 text-amber-300 border-amber-700/50',
-    'shadow-amber-700/15',
-    '["Game Table Tagging Rights","Access to Sunday Game Discussions"]'
-),
-(
-    3,
-    'Casual Tactician',
-    'Bronze Vanguard of Koregaon',
-    'Cafe Contender',
-    'Frequents Pune board game cafes and demonstrates reliable tabletop instincts.',
-    '⚔️',
-    20,
-    2,
-    'Uncommon',
-    'from-amber-800/30 via-slate-900 to-amber-950/40',
-    'border-amber-600/60',
-    'text-amber-200',
-    'bg-amber-600/20 text-amber-200 border-amber-500/40',
-    'shadow-amber-500/20',
-    '["Early Seat Reservations","Bronze Shuffler Tier Status"]'
-),
-(
-    4,
-    'Board Game Enthusiast',
-    'Master of the Card & Tile',
-    'Strategy Adept',
-    'Explores nearly a third of the catalog with a strong grasp of tile placement and card play.',
-    '🏰',
-    30,
-    2,
-    'Uncommon',
-    'from-blue-950/40 via-slate-900 to-indigo-950/40',
-    'border-blue-500/60',
-    'text-blue-300',
-    'bg-blue-500/20 text-blue-300 border-blue-400/40',
-    'shadow-blue-500/25',
-    '["Custom Table Name Tag","Host Co-Player Recommendation"]'
-),
-(
-    5,
-    'Tabletop Strategist',
-    'Silver Viceroy of Baner Tables',
-    'Tabletop Champion',
-    'Comfortably maneuvers euro-style resource management, engine building, and deduction games.',
-    '🛡️',
-    40,
-    3,
-    'Rare',
-    'from-slate-700/40 via-indigo-950/50 to-slate-900',
-    'border-slate-300/60',
-    'text-slate-100',
-    'bg-slate-200/20 text-slate-100 border-slate-300/50',
-    'shadow-slate-300/25',
-    '["Silver Shuffler Tier Status","Tournament Seeding Priority"]'
-),
-(
-    6,
-    'Seasoned Shuffler',
-    'Commander of a Thousand Battles',
-    'Halfway to Catalog Mastery (50%+)',
-    'Conquered half the official game library and a loyal regular at weekend gatherings.',
-    '🌟',
-    50,
-    4,
-    'Rare',
-    'from-cyan-950/50 via-teal-950/40 to-slate-900',
-    'border-cyan-400/70',
-    'text-cyan-200',
-    'bg-cyan-500/20 text-cyan-200 border-cyan-400/50',
-    'shadow-cyan-400/30',
-    '["New Game Library Voting Voice","Exclusive Shuffler Community Role"]'
-),
-(
-    7,
-    'Master of Meeples',
-    'Gold Sovereign of Strategy',
-    'High Tactician (60%+)',
-    'Commanding table presence with extensive knowledge across strategic and party classics.',
-    '👑',
-    60,
-    5,
-    'Epic',
-    'from-amber-600/30 via-yellow-600/20 to-purple-950/50',
-    'border-amber-400/80',
-    'text-amber-200',
-    'bg-amber-400/20 text-amber-200 border-amber-400/50',
-    'shadow-amber-400/35',
-    '["Gold Strategist Tier Status","Complimentary Table Host Drink"]'
-),
-(
-    8,
-    'Grandmaster Tactician',
-    'Platinum Grand Marshal',
-    'Tabletop Virtuoso (70%+)',
-    'Demonstrates surgical precision in deep euro-games, complex negotiations, and heavy card systems.',
-    '💎',
-    70,
-    6,
-    'Epic',
-    'from-indigo-600/30 via-purple-600/20 to-sky-950/50',
-    'border-indigo-400/80',
-    'text-indigo-200',
-    'bg-indigo-400/20 text-indigo-200 border-indigo-400/50',
-    'shadow-indigo-400/40',
-    '["VIP Game Day Lounge Pass","Rule Explainer Recognition"]'
-),
-(
-    9,
-    'Tabletop Sovereign',
-    'Diamond Regent of Tabletop Realms',
-    'Pune Board Game Legend (80%+)',
-    'A legendary pillar of Pune gaming who has conquered 80%+ of all curated board games.',
-    '🌌',
-    80,
-    7,
-    'Legendary',
-    'from-purple-600/40 via-pink-600/30 to-amber-900/40',
-    'border-purple-300',
-    'text-purple-100',
-    'bg-purple-500/30 text-purple-100 border-purple-300/60',
-    'shadow-purple-400/50',
-    '["Diamond Grandmaster Tier Status","Permanent Hall of Fame Listing","Private Table Reservation"]'
-),
-(
-    10,
-    'Apex Shuffler',
-    'Mythic Tabletop Archon',
-    '90%+ Catalog Mastery & Elite Veteran',
-    'Supreme mastery of 90%+ games in Pune meetups. An immortal legend of Social Shuffle.',
-    '⚡',
-    90,
-    8,
-    'Mythic',
-    'from-amber-400/40 via-purple-600/40 to-cyan-400/40',
-    'border-amber-300',
-    'text-amber-100',
-    'bg-gradient-to-r from-amber-400/30 to-purple-400/30 text-amber-200 border-amber-300/70',
-    'shadow-amber-400/60',
-    '["Mythic Golden Avatar Crown","Free VIP Entry to Annual Championship","Name Etched onto Social Shuffle Trophy","Lifetime Pune Shuffler Pioneer Status"]'
-)
-ON CONFLICT (level) DO NOTHING;
+-- 7. `registrations` (Clean initial state: recorded via event checkouts)
 
--- 8. `participant_badges` (Clean initial state: awarded as participants play games)
+-- 8. `feedback` (Clean initial state: submitted by event attendees)
 
--- 9. `registrations` (Clean initial state: recorded via event checkouts)
-
--- 10. `feedback` (Clean initial state: submitted by event attendees)
-
--- 11. Seed `audit_logs`
+-- 9. Seed `audit_logs`
 INSERT INTO audit_logs (id, admin_name, action, target, details, description, "timestamp")
 VALUES
 (
@@ -878,7 +661,7 @@ VALUES
     'Parimal Shete',
     'SECURITY_INIT',
     'PostgreSQL Supabase Database',
-    'All domain tables (admins, badges, venues, events, games) persisted directly in database',
+    'All domain tables (admins, venues, events, games, passport, catalog) persisted directly in database',
     'Active production PostgreSQL datasource verified',
     '2026-09-29T12:00:00Z'
 )
@@ -956,8 +739,6 @@ ALTER TABLE public.participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.venues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.games ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.badge_levels ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.participant_badges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.registrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.event_feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.safety_reports ENABLE ROW LEVEL SECURITY;
