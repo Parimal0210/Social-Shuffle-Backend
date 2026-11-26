@@ -12,6 +12,7 @@ import com.socialshuffle.security.RateLimitingService;
 import com.socialshuffle.security.SecurityTokenService;
 import com.socialshuffle.service.EmailNotificationService;
 import com.socialshuffle.service.EmailNotificationService.EmailDeliveryResult;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
@@ -36,6 +37,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -59,6 +61,8 @@ public class AuthController {
     private volatile long firebaseCertsFetchedAt = 0L;
     private volatile Map<String, PublicKey> cachedGoogleOAuthCerts = Collections.emptyMap();
     private volatile long googleOAuthCertsFetchedAt = 0L;
+    private final Object firebaseCertLock = new Object();
+    private final Object googleCertLock = new Object();
 
     private final UserRepository userRepository;
     private final ParticipantRepository participantRepository;
@@ -97,7 +101,22 @@ public class AuthController {
         this.rateLimitingService = rateLimitingService;
         this.emailNotificationService = emailNotificationService;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(6)).build();
+        this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(3))
+                .build();
+    }
+
+    @PostConstruct
+    public void warmGoogleCertificatesAsync() {
+        CompletableFuture.runAsync(() -> {
+            try {
+                refreshFirebaseCerts();
+            } catch (Exception ignored) {}
+            try {
+                refreshGoogleOAuthCerts();
+            } catch (Exception ignored) {}
+        });
     }
 
     // =========================================================================
@@ -492,7 +511,7 @@ public class AuthController {
             adminUser.setLoginAt(nowIso);
             adminUser.setLastActiveAt(nowIso);
 
-            upsertGoogleUserRecord(email, identity.googleId(), null, adminUser, null, nowIso);
+            upsertGoogleUserRecordAsync(email, identity.googleId(), null, adminUser, null, nowIso);
             String token = securityTokenService.generateToken(a.getId(), "admin");
             return ResponseEntity.ok(new AuthResponse(token, adminUser, null, "Welcome back, Admin " + a.getName()));
         }
@@ -526,7 +545,7 @@ public class AuthController {
         user.setLastActiveAt(nowIso);
         userRepository.save(user);
 
-        upsertGoogleUserRecord(email, identity.googleId(), participant != null ? participant.getId() : null, user, participant, nowIso);
+        upsertGoogleUserRecordAsync(email, identity.googleId(), participant != null ? participant.getId() : null, user, participant, nowIso);
         String token = securityTokenService.generateToken(user.getId(), user.getRole() != null ? user.getRole() : "participant");
         return ResponseEntity.ok(new AuthResponse(token, user, participant, "Google login successful"));
     }
@@ -755,12 +774,37 @@ public class AuthController {
         String firebaseIdToken = req.getFirebaseIdToken() != null ? req.getFirebaseIdToken().trim() : "";
         String accessToken = req.getAccessToken() != null ? req.getAccessToken().trim() : "";
 
-        // 1. Prefer Google OAuth2 accessToken verification via official UserInfo API
+        // 1. Collect candidate JWT tokens (Firebase Auth ID token and/or Google OIDC ID token)
+        // Verify locally first using cached X.509 certs (< 1ms, zero outbound HTTP call per login)
+        List<String> candidateTokens = new ArrayList<>(2);
+        if (!firebaseIdToken.isEmpty()) candidateTokens.add(firebaseIdToken);
+        if (!idToken.isEmpty() && !idToken.equals(firebaseIdToken)) candidateTokens.add(idToken);
+
+        VerifiedGoogleIdentity lastLocalFailure = null;
+        for (String token : candidateTokens) {
+            VerifiedGoogleIdentity firebaseCheck = verifyFirebaseIdTokenIfApplicable(token, claimedEmail, req);
+            if (firebaseCheck != null) {
+                if (firebaseCheck.valid()) {
+                    return firebaseCheck;
+                }
+                lastLocalFailure = firebaseCheck;
+                continue;
+            }
+            VerifiedGoogleIdentity localGoogleCheck = verifyGoogleOidcJwtLocally(token, claimedEmail, req);
+            if (localGoogleCheck != null) {
+                if (localGoogleCheck.valid()) {
+                    return localGoogleCheck;
+                }
+                lastLocalFailure = localGoogleCheck;
+            }
+        }
+
+        // 2. Fallback: verify OAuth2 accessToken via official Google UserInfo API (fast 4s timeout)
         if (!accessToken.isEmpty()) {
             try {
                 HttpRequest httpReq = HttpRequest.newBuilder()
                         .uri(URI.create("https://www.googleapis.com/oauth2/v3/userinfo"))
-                        .timeout(Duration.ofSeconds(8))
+                        .timeout(Duration.ofSeconds(4))
                         .header("Authorization", "Bearer " + accessToken)
                         .GET().build();
                 HttpResponse<String> resp = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
@@ -784,52 +828,38 @@ public class AuthController {
                             null
                     );
                 }
-                if (idToken.isEmpty() && firebaseIdToken.isEmpty()) {
+                if (candidateTokens.isEmpty()) {
                     return new VerifiedGoogleIdentity(false, null, null, null, null, "Google access token verification failed.");
                 }
             } catch (Exception e) {
-                if (idToken.isEmpty() && firebaseIdToken.isEmpty()) {
+                if (candidateTokens.isEmpty()) {
                     return new VerifiedGoogleIdentity(false, null, null, null, null, "Failed to verify Google access token.");
                 }
             }
         }
 
-        // 2. Collect candidate ID tokens (Google OIDC ID token and/or Firebase Auth ID token)
-        List<String> candidateTokens = new ArrayList<>(2);
-        if (!idToken.isEmpty()) candidateTokens.add(idToken);
-        if (!firebaseIdToken.isEmpty() && !firebaseIdToken.equals(idToken)) candidateTokens.add(firebaseIdToken);
-
-        VerifiedGoogleIdentity lastFailure = null;
+        // 3. Final remote TokenInfo fallback only if local cert verification couldn't validate OIDC token
+        VerifiedGoogleIdentity remoteFailure = null;
         for (String token : candidateTokens) {
-            VerifiedGoogleIdentity verified = verifySingleIdToken(token, claimedEmail, req);
+            VerifiedGoogleIdentity verified = verifyViaTokenInfoEndpoint(token, claimedEmail, req);
             if (verified.valid()) {
                 return verified;
             }
-            lastFailure = verified;
+            remoteFailure = verified;
         }
 
-        if (lastFailure != null) {
-            return lastFailure;
+        if (lastLocalFailure != null && lastLocalFailure.error() != null) {
+            return lastLocalFailure;
+        }
+        if (remoteFailure != null) {
+            return remoteFailure;
         }
 
         return new VerifiedGoogleIdentity(false, null, null, null, null,
                 "A verified Google OAuth token (idToken or accessToken) is required.");
     }
 
-    private VerifiedGoogleIdentity verifySingleIdToken(String idToken, String claimedEmail, GoogleLoginRequest req) {
-        // 2A. Firebase Auth ID Token verification (iss: https://securetoken.google.com/<projectId>)
-        VerifiedGoogleIdentity firebaseCheck = verifyFirebaseIdTokenIfApplicable(idToken, claimedEmail, req);
-        if (firebaseCheck != null) {
-            return firebaseCheck;
-        }
-
-        // 2B. Local RS256 verification against Google's official X.509 certificates
-        VerifiedGoogleIdentity localGoogleCheck = verifyGoogleOidcJwtLocally(idToken, claimedEmail, req);
-        if (localGoogleCheck != null && localGoogleCheck.valid()) {
-            return localGoogleCheck;
-        }
-
-        // 2C. Remote verification via Google's official TokenInfo endpoints
+    private VerifiedGoogleIdentity verifyViaTokenInfoEndpoint(String idToken, String claimedEmail, GoogleLoginRequest req) {
         String[] tokenInfoEndpoints = {
                 "https://oauth2.googleapis.com/tokeninfo?id_token=",
                 "https://www.googleapis.com/oauth2/v3/tokeninfo?id_token="
@@ -841,7 +871,7 @@ public class AuthController {
             try {
                 HttpRequest httpReq = HttpRequest.newBuilder()
                         .uri(URI.create(base + encodedToken))
-                        .timeout(Duration.ofSeconds(8))
+                        .timeout(Duration.ofSeconds(4))
                         .GET().build();
                 HttpResponse<String> resp = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() != 200) {
@@ -883,10 +913,6 @@ public class AuthController {
             }
         }
 
-        if (localGoogleCheck != null && !localGoogleCheck.valid() && localGoogleCheck.error() != null) {
-            System.err.println("[Google Auth] Token verification failed (local=" + localGoogleCheck.error() + ", tokeninfo=" + lastDetail + ")");
-            return localGoogleCheck;
-        }
         System.err.println("[Google Auth] TokenInfo verification failed: " + lastDetail);
         return new VerifiedGoogleIdentity(false, null, null, null, null, "Google ID token verification failed.");
     }
@@ -980,27 +1006,36 @@ public class AuthController {
     private PublicKey getGoogleOAuthPublicKey(String kid) throws Exception {
         long now = System.currentTimeMillis();
         if (cachedGoogleOAuthCerts.isEmpty() || (now - googleOAuthCertsFetchedAt) > 3600_000L || !cachedGoogleOAuthCerts.containsKey(kid)) {
-            HttpRequest certReq = HttpRequest.newBuilder()
-                    .uri(URI.create("https://www.googleapis.com/oauth2/v1/certs"))
-                    .timeout(Duration.ofSeconds(8))
-                    .GET().build();
-            HttpResponse<String> resp = httpClient.send(certReq, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() == 200) {
-                Map<?, ?> rawMap = objectMapper.readValue(resp.body(), Map.class);
-                Map<String, PublicKey> keys = new HashMap<>();
-                CertificateFactory cf = CertificateFactory.getInstance("X.509");
-                for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
-                    if (entry.getKey() != null && entry.getValue() != null) {
-                        byte[] bytes = String.valueOf(entry.getValue()).getBytes(StandardCharsets.UTF_8);
-                        X509Certificate cert = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(bytes));
-                        keys.put(String.valueOf(entry.getKey()), cert.getPublicKey());
-                    }
+            synchronized (googleCertLock) {
+                long lockedNow = System.currentTimeMillis();
+                if (cachedGoogleOAuthCerts.isEmpty() || (lockedNow - googleOAuthCertsFetchedAt) > 3600_000L || !cachedGoogleOAuthCerts.containsKey(kid)) {
+                    refreshGoogleOAuthCerts();
                 }
-                cachedGoogleOAuthCerts = keys;
-                googleOAuthCertsFetchedAt = now;
             }
         }
         return cachedGoogleOAuthCerts.get(kid);
+    }
+
+    private void refreshGoogleOAuthCerts() throws Exception {
+        HttpRequest certReq = HttpRequest.newBuilder()
+                .uri(URI.create("https://www.googleapis.com/oauth2/v1/certs"))
+                .timeout(Duration.ofSeconds(4))
+                .GET().build();
+        HttpResponse<String> resp = httpClient.send(certReq, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() == 200) {
+            Map<?, ?> rawMap = objectMapper.readValue(resp.body(), Map.class);
+            Map<String, PublicKey> keys = new HashMap<>();
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    byte[] bytes = String.valueOf(entry.getValue()).getBytes(StandardCharsets.UTF_8);
+                    X509Certificate cert = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(bytes));
+                    keys.put(String.valueOf(entry.getKey()), cert.getPublicKey());
+                }
+            }
+            cachedGoogleOAuthCerts = keys;
+            googleOAuthCertsFetchedAt = System.currentTimeMillis();
+        }
     }
 
     private VerifiedGoogleIdentity verifyFirebaseIdTokenIfApplicable(String idToken, String claimedEmail, GoogleLoginRequest req) {
@@ -1088,27 +1123,63 @@ public class AuthController {
     private PublicKey getFirebasePublicKey(String kid) throws Exception {
         long now = System.currentTimeMillis();
         if (cachedFirebaseCerts.isEmpty() || (now - firebaseCertsFetchedAt) > 3600_000L || !cachedFirebaseCerts.containsKey(kid)) {
-            HttpRequest certReq = HttpRequest.newBuilder()
-                    .uri(URI.create("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"))
-                    .timeout(Duration.ofSeconds(8))
-                    .GET().build();
-            HttpResponse<String> resp = httpClient.send(certReq, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() == 200) {
-                Map<?, ?> rawMap = objectMapper.readValue(resp.body(), Map.class);
-                Map<String, PublicKey> keys = new HashMap<>();
-                CertificateFactory cf = CertificateFactory.getInstance("X.509");
-                for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
-                    if (entry.getKey() != null && entry.getValue() != null) {
-                        byte[] bytes = String.valueOf(entry.getValue()).getBytes(StandardCharsets.UTF_8);
-                        X509Certificate cert = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(bytes));
-                        keys.put(String.valueOf(entry.getKey()), cert.getPublicKey());
-                    }
+            synchronized (firebaseCertLock) {
+                long lockedNow = System.currentTimeMillis();
+                if (cachedFirebaseCerts.isEmpty() || (lockedNow - firebaseCertsFetchedAt) > 3600_000L || !cachedFirebaseCerts.containsKey(kid)) {
+                    refreshFirebaseCerts();
                 }
-                cachedFirebaseCerts = keys;
-                firebaseCertsFetchedAt = now;
             }
         }
         return cachedFirebaseCerts.get(kid);
+    }
+
+    private void refreshFirebaseCerts() throws Exception {
+        HttpRequest certReq = HttpRequest.newBuilder()
+                .uri(URI.create("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"))
+                .timeout(Duration.ofSeconds(4))
+                .GET().build();
+        HttpResponse<String> resp = httpClient.send(certReq, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() == 200) {
+            Map<?, ?> rawMap = objectMapper.readValue(resp.body(), Map.class);
+            Map<String, PublicKey> keys = new HashMap<>();
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    byte[] bytes = String.valueOf(entry.getValue()).getBytes(StandardCharsets.UTF_8);
+                    X509Certificate cert = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(bytes));
+                    keys.put(String.valueOf(entry.getKey()), cert.getPublicKey());
+                }
+            }
+            cachedFirebaseCerts = keys;
+            firebaseCertsFetchedAt = System.currentTimeMillis();
+        }
+    }
+
+    private void upsertGoogleUserRecordAsync(String email, String googleId, String participantId, User user, Participant participant, String nowIso) {
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("email", email);
+            payload.put("googleId", googleId != null ? googleId : "g_" + email);
+            if (participant != null) payload.put("participant", participant);
+            payload.put("user", user);
+            payload.put("registeredAt", nowIso);
+            String userJson = objectMapper.writeValueAsString(payload);
+            String resolvedGoogleId = googleId != null ? googleId : "g_" + email;
+
+            CompletableFuture.runAsync(() -> {
+                try {
+                    GoogleUser entity = googleUserRepository.findByEmailIgnoreCase(email).orElseGet(GoogleUser::new);
+                    entity.setEmail(email);
+                    entity.setGoogleId(resolvedGoogleId);
+                    entity.setParticipantId(participantId);
+                    entity.setUserJson(userJson);
+                    if (entity.getRegisteredAt() == null) entity.setRegisteredAt(nowIso);
+                    googleUserRepository.save(entity);
+                } catch (Exception ignored) {
+                }
+            });
+        } catch (Exception ignored) {
+        }
     }
 
     private void upsertGoogleUserRecord(String email, String googleId, String participantId, User user, Participant participant, String nowIso) {

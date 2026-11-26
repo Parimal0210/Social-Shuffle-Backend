@@ -23,6 +23,9 @@ import java.util.concurrent.Executor;
 public class SocialShuffleApplication {
 
     public static void main(String[] args) {
+        if (System.getProperty("java.net.preferIPv4Stack") == null) {
+            System.setProperty("java.net.preferIPv4Stack", "true");
+        }
         SpringApplication.run(SocialShuffleApplication.class, args);
         System.out.println("=================================================");
         System.out.println("Social Shuffle Pune Spring Boot API Started!");
