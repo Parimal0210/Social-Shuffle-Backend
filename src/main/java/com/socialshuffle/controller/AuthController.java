@@ -61,8 +61,12 @@ public class AuthController {
     private volatile long firebaseCertsFetchedAt = 0L;
     private volatile Map<String, PublicKey> cachedGoogleOAuthCerts = Collections.emptyMap();
     private volatile long googleOAuthCertsFetchedAt = 0L;
+    private volatile Map<String, AdminAccount> cachedActiveAdminsByEmail = Collections.emptyMap();
+    private volatile long adminsCacheLoadedAt = 0L;
+    private static final long ADMINS_CACHE_TTL_MS = 60_000L;
     private final Object firebaseCertLock = new Object();
     private final Object googleCertLock = new Object();
+    private final Object adminCacheLock = new Object();
 
     private final UserRepository userRepository;
     private final ParticipantRepository participantRepository;
@@ -116,7 +120,41 @@ public class AuthController {
             try {
                 refreshGoogleOAuthCerts();
             } catch (Exception ignored) {}
+            try {
+                refreshActiveAdminsCache();
+            } catch (Exception ignored) {}
         });
+    }
+
+    private Optional<AdminAccount> findCachedActiveAdminByEmail(String email) {
+        if (email == null || email.isBlank()) return Optional.empty();
+        long now = System.currentTimeMillis();
+        if (adminsCacheLoadedAt == 0L || (now - adminsCacheLoadedAt) > ADMINS_CACHE_TTL_MS) {
+            synchronized (adminCacheLock) {
+                long lockedNow = System.currentTimeMillis();
+                if (adminsCacheLoadedAt == 0L || (lockedNow - adminsCacheLoadedAt) > ADMINS_CACHE_TTL_MS) {
+                    try {
+                        refreshActiveAdminsCache();
+                    } catch (Exception e) {
+                        return adminRepository.findByEmailIgnoreCase(email).filter(AdminAccount::isActive);
+                    }
+                }
+            }
+        }
+        AdminAccount found = cachedActiveAdminsByEmail.get(email.trim().toLowerCase());
+        return (found != null && found.isActive()) ? Optional.of(found) : Optional.empty();
+    }
+
+    private void refreshActiveAdminsCache() {
+        List<AdminAccount> activeAdmins = adminRepository.findByActiveTrue();
+        Map<String, AdminAccount> byEmail = new HashMap<>();
+        for (AdminAccount a : activeAdmins) {
+            if (a.getEmail() != null && !a.getEmail().isBlank()) {
+                byEmail.put(a.getEmail().trim().toLowerCase(), a);
+            }
+        }
+        cachedActiveAdminsByEmail = Collections.unmodifiableMap(byEmail);
+        adminsCacheLoadedAt = System.currentTimeMillis();
     }
 
     // =========================================================================
@@ -500,9 +538,9 @@ public class AuthController {
         String email = identity.email();
         String nowIso = Instant.now().toString();
 
-        // 1. Check admins
-        Optional<AdminAccount> adminOpt = adminRepository.findByEmailIgnoreCase(email);
-        if (adminOpt.isPresent() && adminOpt.get().isActive()) {
+        // 1. Check cached active admins (0ms in-memory lookup)
+        Optional<AdminAccount> adminOpt = findCachedActiveAdminByEmail(email);
+        if (adminOpt.isPresent()) {
             AdminAccount a = adminOpt.get();
             User adminUser = new User(a.getId(), a.getName(), a.getEmail(), a.getPhone(), "", "admin", a.getArea() != null ? a.getArea() : "Pune");
             adminUser.setAvatar(identity.avatar() != null && !identity.avatar().isEmpty() ? identity.avatar() : a.getAvatar());
@@ -516,9 +554,13 @@ public class AuthController {
             return ResponseEntity.ok(new AuthResponse(token, adminUser, null, "Welcome back, Admin " + a.getName()));
         }
 
-        // 2. Check participants / users
-        Optional<Participant> pOpt = participantRepository.findByEmailIgnoreCase(email);
-        Optional<User> uOpt = userRepository.findByEmailIgnoreCase(email);
+        // 2. Check participants / users concurrently (single parallel DB RTT)
+        CompletableFuture<Optional<Participant>> pFuture = CompletableFuture.supplyAsync(() -> participantRepository.findByEmailIgnoreCase(email));
+        CompletableFuture<Optional<User>> uFuture = CompletableFuture.supplyAsync(() -> userRepository.findByEmailIgnoreCase(email));
+        CompletableFuture.allOf(pFuture, uFuture).join();
+
+        Optional<Participant> pOpt = pFuture.join();
+        Optional<User> uOpt = uFuture.join();
 
         if (pOpt.isEmpty() && uOpt.isEmpty()) {
             Map<String, Object> notFound = new LinkedHashMap<>();
@@ -530,6 +572,7 @@ public class AuthController {
         }
 
         Participant participant = pOpt.orElse(null);
+        boolean userExisted = uOpt.isPresent();
         User user = uOpt.orElseGet(() -> {
             Participant p = participant;
             User u = new User("u-" + p.getId().replaceFirst("^p-", ""), p.getName(), email, p.getPhone(), "", "participant", p.getArea());
@@ -543,7 +586,18 @@ public class AuthController {
         user.setAuthProvider("google");
         user.setLoginAt(nowIso);
         user.setLastActiveAt(nowIso);
-        userRepository.save(user);
+
+        if (userExisted) {
+            final String uid = user.getId();
+            final String avatarToSave = user.getAvatar();
+            CompletableFuture.runAsync(() -> {
+                try {
+                    userRepository.updateGoogleLoginMetadata(uid, "google", nowIso, nowIso, avatarToSave);
+                } catch (Exception ignored) {}
+            });
+        } else {
+            userRepository.save(user);
+        }
 
         upsertGoogleUserRecordAsync(email, identity.googleId(), participant != null ? participant.getId() : null, user, participant, nowIso);
         String token = securityTokenService.generateToken(user.getId(), user.getRole() != null ? user.getRole() : "participant");
@@ -551,7 +605,6 @@ public class AuthController {
     }
 
     @PostMapping({"/google/signup", "/google"})
-    @Transactional
     public ResponseEntity<?> googleSignup(@RequestBody GoogleLoginRequest req) {
         VerifiedGoogleIdentity identity = resolveAndVerifyGoogleIdentity(req);
         if (!identity.valid()) {
@@ -561,9 +614,9 @@ public class AuthController {
         String email = identity.email();
         String nowIso = Instant.now().toString();
 
-        // If admin email, log in cleanly as admin
-        Optional<AdminAccount> adminOpt = adminRepository.findByEmailIgnoreCase(email);
-        if (adminOpt.isPresent() && adminOpt.get().isActive()) {
+        // If admin email, log in cleanly as admin (0ms cached lookup)
+        Optional<AdminAccount> adminOpt = findCachedActiveAdminByEmail(email);
+        if (adminOpt.isPresent()) {
             AdminAccount a = adminOpt.get();
             User adminUser = new User(a.getId(), a.getName(), a.getEmail(), a.getPhone(), "", "admin", a.getArea() != null ? a.getArea() : "Pune");
             adminUser.setAvatar(identity.avatar() != null && !identity.avatar().isEmpty() ? identity.avatar() : a.getAvatar());
@@ -572,7 +625,7 @@ public class AuthController {
             adminUser.setLoginAt(nowIso);
             adminUser.setLastActiveAt(nowIso);
 
-            upsertGoogleUserRecord(email, identity.googleId(), null, adminUser, null, nowIso);
+            upsertGoogleUserRecordAsync(email, identity.googleId(), null, adminUser, null, nowIso);
             String token = securityTokenService.generateToken(a.getId(), "admin");
             return ResponseEntity.ok(new AuthResponse(token, adminUser, null, "Google Admin authentication successful"));
         }
@@ -583,7 +636,13 @@ public class AuthController {
         String safeBio = sanitize(nonEmpty(req.getBio(), "Pune board gamer • Joined via Google Account", "Pune board gamer • Joined via Google Account"));
         String avatar = nonEmpty(req.getAvatar(), identity.avatar(), "");
 
-        Participant participant = participantRepository.findByEmailIgnoreCase(email).orElse(null);
+        // Query participant, user, and credential existence concurrently (1 DB RTT)
+        CompletableFuture<Optional<Participant>> pFuture = CompletableFuture.supplyAsync(() -> participantRepository.findByEmailIgnoreCase(email));
+        CompletableFuture<Optional<User>> uFuture = CompletableFuture.supplyAsync(() -> userRepository.findByEmailIgnoreCase(email));
+        CompletableFuture<Boolean> credFuture = CompletableFuture.supplyAsync(() -> credentialRepository.existsByEmailIgnoreCase(email));
+        CompletableFuture.allOf(pFuture, uFuture, credFuture).join();
+
+        Participant participant = pFuture.join().orElse(null);
         boolean isNewSignup = (participant == null);
 
         if (participant == null) {
@@ -600,9 +659,8 @@ public class AuthController {
             participant.setAvatar(avatar);
         }
         participant.setUpdatedAt(nowIso);
-        participantRepository.save(participant);
 
-        User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        User user = uFuture.join().orElse(null);
         if (user == null) {
             user = new User("u-" + UUID.randomUUID().toString().substring(0, 8), participant.getName(), email, participant.getPhone(), "oauth_google", "participant", participant.getArea());
             user.setCreatedAt(nowIso);
@@ -613,25 +671,37 @@ public class AuthController {
         user.setAuthProvider("google");
         user.setLoginAt(nowIso);
         user.setLastActiveAt(nowIso);
-        userRepository.save(user);
 
-        if (!credentialRepository.existsByEmailIgnoreCase(email)) {
-            UserCredential cred = new UserCredential();
-            cred.setUserId("cred-" + participant.getId());
-            cred.setSubjectType("participant");
-            cred.setSubjectId(participant.getId());
-            cred.setEmail(email);
-            cred.setPhone(participant.getPhone());
-            cred.setUsername(participant.getUsername() != null ? participant.getUsername() : email.split("@")[0]);
-            cred.setAuthProvider("google");
-            cred.setFailedAttempts(0);
-            cred.setLastLoginAt(nowIso);
-            cred.setCreatedAt(nowIso);
-            cred.setUpdatedAt(nowIso);
-            credentialRepository.save(cred);
+        final Participant participantToSave = participant;
+        final User userToSave = user;
+        CompletableFuture<Participant> savedParticipantFuture = CompletableFuture.supplyAsync(() -> participantRepository.save(participantToSave));
+        CompletableFuture<User> savedUserFuture = CompletableFuture.supplyAsync(() -> userRepository.save(userToSave));
+        CompletableFuture.allOf(savedParticipantFuture, savedUserFuture).join();
+        participant = savedParticipantFuture.join();
+        user = savedUserFuture.join();
+
+        if (!credFuture.join()) {
+            final Participant pSnap = participant;
+            CompletableFuture.runAsync(() -> {
+                try {
+                    UserCredential cred = new UserCredential();
+                    cred.setUserId("cred-" + pSnap.getId());
+                    cred.setSubjectType("participant");
+                    cred.setSubjectId(pSnap.getId());
+                    cred.setEmail(email);
+                    cred.setPhone(pSnap.getPhone());
+                    cred.setUsername(pSnap.getUsername() != null ? pSnap.getUsername() : email.split("@")[0]);
+                    cred.setAuthProvider("google");
+                    cred.setFailedAttempts(0);
+                    cred.setLastLoginAt(nowIso);
+                    cred.setCreatedAt(nowIso);
+                    cred.setUpdatedAt(nowIso);
+                    credentialRepository.save(cred);
+                } catch (Exception ignored) {}
+            });
         }
 
-        upsertGoogleUserRecord(email, identity.googleId(), participant.getId(), user, participant, nowIso);
+        upsertGoogleUserRecordAsync(email, identity.googleId(), participant.getId(), user, participant, nowIso);
         if (isNewSignup) {
             emailNotificationService.sendWelcomeEmailAsync(email, participant.getName());
         }
