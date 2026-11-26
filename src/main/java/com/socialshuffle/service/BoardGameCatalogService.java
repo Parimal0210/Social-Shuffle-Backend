@@ -85,7 +85,7 @@ public class BoardGameCatalogService {
     public void warmOnStartup() {
         try {
             loadFromDatabaseIfEmpty();
-            refreshCatalogIfNeeded(true);
+            refreshCatalogIfNeeded(false);
         } catch (Exception e) {
             log.warn("Initial daily board game catalog warm-up deferred: {}", e.getMessage());
         }
@@ -212,42 +212,58 @@ public class BoardGameCatalogService {
     private void loadFromDatabaseIfEmpty() {
         if (!catalogCache.isEmpty()) return;
         try {
-            List<BoardGameCatalogItem> dbRows = catalogRepository.findAllByOrderByBggRankAsc();
-            if (!dbRows.isEmpty()) {
-                List<CatalogEntry> loaded = new ArrayList<>(dbRows.size());
-                String latestDate = "";
-                for (BoardGameCatalogItem row : dbRows) {
-                    if (row.getName() == null || row.getName().isBlank()) continue;
-                    loaded.add(new CatalogEntry(
-                            row.getName(),
-                            row.getGenre() != null ? row.getGenre() : "Strategy",
-                            row.getPlayers() != null ? row.getPlayers() : "2-4 Players",
-                            row.getDuration() != null ? row.getDuration() : "45-60 mins",
-                            row.getExternalId(),
-                            row.getBggRank()
-                    ));
-                    if (latestDate.isEmpty() && row.getSnapshotDate() != null) {
-                        latestDate = row.getSnapshotDate();
+            List<CatalogEntry> loaded = new ArrayList<>(26000);
+            final String[] latestDateHolder = { "" };
+            jdbcTemplate.query(
+                    "SELECT name, genre, players, duration, external_id, bgg_rank, has_verified_specs, snapshot_date " +
+                    "FROM board_game_catalog ORDER BY bgg_rank ASC",
+                    (rs) -> {
+                        String name = rs.getString("name");
+                        if (name == null || name.isBlank()) return;
+                        String genre = rs.getString("genre");
+                        String players = rs.getString("players");
+                        String duration = rs.getString("duration");
+                        String externalId = rs.getString("external_id");
+                        int rank = rs.getInt("bgg_rank");
+                        boolean verified = rs.getBoolean("has_verified_specs");
+                        String snapDate = rs.getString("snapshot_date");
+
+                        loaded.add(new CatalogEntry(
+                                name,
+                                genre != null ? genre : "Strategy",
+                                players != null ? players : "2-4 Players",
+                                duration != null ? duration : "45-60 mins",
+                                externalId,
+                                rank
+                        ));
+                        if (latestDateHolder[0].isEmpty() && snapDate != null) {
+                            latestDateHolder[0] = snapDate;
+                        }
+                        if (verified && externalId != null && !externalId.isBlank()) {
+                            detailsCache.put(
+                                    externalId,
+                                    new CachedDetails(
+                                            new GameDetails(
+                                                    genre != null ? genre : "Strategy",
+                                                    players != null ? players : "2-4 Players",
+                                                    duration != null ? duration : "45-60 mins"
+                                            ),
+                                            System.currentTimeMillis()
+                                    )
+                            );
+                        }
                     }
-                    if (row.isHasVerifiedSpecs() && row.getExternalId() != null && !row.getExternalId().isBlank()) {
-                        detailsCache.put(
-                                row.getExternalId(),
-                                new CachedDetails(
-                                        new GameDetails(
-                                                row.getGenre() != null ? row.getGenre() : "Strategy",
-                                                row.getPlayers() != null ? row.getPlayers() : "2-4 Players",
-                                                row.getDuration() != null ? row.getDuration() : "45-60 mins"
-                                        ),
-                                        System.currentTimeMillis()
-                                )
-                        );
-                    }
+            );
+            if (!loaded.isEmpty()) {
+                catalogCache = Collections.unmodifiableList(loaded);
+                if (catalogUpdatedDate.isEmpty()) catalogUpdatedDate = latestDateHolder[0];
+                String todayStr = LocalDate.now(ZoneOffset.UTC).toString();
+                String yesterdayStr = LocalDate.now(ZoneOffset.UTC).minusDays(1).toString();
+                if (todayStr.equals(latestDateHolder[0]) || yesterdayStr.equals(latestDateHolder[0])) {
+                    catalogCachedAt = System.currentTimeMillis();
                 }
-                if (!loaded.isEmpty()) {
-                    catalogCache = Collections.unmodifiableList(loaded);
-                    if (catalogUpdatedDate.isEmpty()) catalogUpdatedDate = latestDate;
-                    log.info("Loaded {} board games from Supabase board_game_catalog", loaded.size());
-                }
+                log.info("Loaded {} board games from Supabase board_game_catalog (snapshot: {})",
+                        loaded.size(), latestDateHolder[0]);
             }
         } catch (Exception e) {
             log.warn("Could not hydrate board_game_catalog from database: {}", e.getMessage());
