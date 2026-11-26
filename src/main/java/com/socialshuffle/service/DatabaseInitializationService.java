@@ -6,6 +6,7 @@ import com.socialshuffle.security.PasswordSecurityUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +36,7 @@ public class DatabaseInitializationService implements CommandLineRunner {
     private final AppConfigRepository appConfigRepository;
     private final AppConfigService appConfigService;
     private final PasswordSecurityUtil passwordSecurityUtil;
+    private final JdbcTemplate jdbcTemplate;
 
     public DatabaseInitializationService(AdminRepository adminRepository,
                                          UserRepository userRepository,
@@ -47,7 +49,8 @@ public class DatabaseInitializationService implements CommandLineRunner {
                                          NotificationItemRepository notificationRepository,
                                          AppConfigRepository appConfigRepository,
                                          AppConfigService appConfigService,
-                                         PasswordSecurityUtil passwordSecurityUtil) {
+                                         PasswordSecurityUtil passwordSecurityUtil,
+                                         JdbcTemplate jdbcTemplate) {
         this.adminRepository = adminRepository;
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
@@ -60,12 +63,14 @@ public class DatabaseInitializationService implements CommandLineRunner {
         this.appConfigRepository = appConfigRepository;
         this.appConfigService = appConfigService;
         this.passwordSecurityUtil = passwordSecurityUtil;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
     @Transactional
     public void run(String... args) {
         log.info("Verifying unified Social Shuffle PostgreSQL schema & core data...");
+        ensureSchemaMaintenance();
         ensureAdminsSynced();
         seedVenuesIfEmpty();
         seedEventsIfEmpty();
@@ -74,6 +79,100 @@ public class DatabaseInitializationService implements CommandLineRunner {
         seedAuditAndNotificationsIfEmpty();
         seedAppConfigsIfMissing();
         log.info("Unified PostgreSQL verification completed cleanly.");
+    }
+
+    private void ensureSchemaMaintenance() {
+        try {
+            jdbcTemplate.execute("DROP TABLE IF EXISTS participant_badges CASCADE");
+            jdbcTemplate.execute("DROP TABLE IF EXISTS badge_levels CASCADE");
+            jdbcTemplate.execute("ALTER TABLE participant_conquered_games DROP COLUMN IF EXISTS players, DROP COLUMN IF EXISTS duration");
+            jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_pcg_part_lib_norm ON participant_conquered_games (participant_id, library_game_id, normalized_name)");
+            jdbcTemplate.execute("DELETE FROM otp_verifications WHERE expires_at < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint");
+
+            jdbcTemplate.execute("""
+                CREATE OR REPLACE VIEW v_top_board_game_conquerors AS
+                WITH part_lib_json AS (
+                  SELECT p.id AS participant_id, elem.val AS game_id
+                  FROM participants p
+                  CROSS JOIN LATERAL jsonb_array_elements_text(
+                    CASE WHEN p.games_played_ids IS NOT NULL AND p.games_played_ids ~ '^\\s*\\[' THEN p.games_played_ids::jsonb ELSE '[]'::jsonb END
+                  ) AS elem(val)
+                  JOIN games g ON g.id = elem.val
+                ),
+                reg_lib AS (
+                  SELECT DISTINCT r.participant_id, elem.val AS game_id
+                  FROM registrations r
+                  CROSS JOIN LATERAL jsonb_array_elements_text(
+                    CASE WHEN r.games_played IS NOT NULL AND r.games_played ~ '^\\s*\\[' THEN r.games_played::jsonb ELSE '[]'::jsonb END
+                  ) AS elem(val)
+                  JOIN games g ON g.id = elem.val
+                  WHERE LOWER(COALESCE(r.attendance_status, '')) <> 'cancelled'
+                ),
+                pcg_lib AS (
+                  SELECT DISTINCT pcg.participant_id, g.id AS game_id
+                  FROM participant_conquered_games pcg
+                  JOIN games g ON g.id = pcg.library_game_id
+                ),
+                all_lib AS (
+                  SELECT participant_id, game_id FROM part_lib_json
+                  UNION
+                  SELECT participant_id, game_id FROM reg_lib
+                  UNION
+                  SELECT participant_id, game_id FROM pcg_lib
+                ),
+                lib_counts AS (
+                  SELECT participant_id, COUNT(*)::int AS library_conquered_count
+                  FROM all_lib
+                  GROUP BY participant_id
+                ),
+                outside_counts AS (
+                  SELECT pcg.participant_id, COUNT(DISTINCT pcg.normalized_name)::int AS outside_conquered_count
+                  FROM participant_conquered_games pcg
+                  LEFT JOIN games g ON g.id = pcg.library_game_id
+                  WHERE g.id IS NULL AND COALESCE(TRIM(pcg.normalized_name), '') <> ''
+                  GROUP BY pcg.participant_id
+                )
+                SELECT
+                  p.id AS participant_id,
+                  p.name,
+                  COALESCE(NULLIF(TRIM(p.area), ''), 'Pune') AS area,
+                  p.avatar,
+                  COALESCE(p.total_events_attended, 0) AS total_events_attended,
+                  COALESCE(lc.library_conquered_count, 0) AS library_conquered_count,
+                  COALESCE(oc.outside_conquered_count, 0) AS outside_conquered_count,
+                  (COALESCE(lc.library_conquered_count, 0) + COALESCE(oc.outside_conquered_count, 0)) AS total_conquered_count
+                FROM participants p
+                LEFT JOIN lib_counts lc ON lc.participant_id = p.id
+                LEFT JOIN outside_counts oc ON oc.participant_id = p.id
+                WHERE (COALESCE(lc.library_conquered_count, 0) + COALESCE(oc.outside_conquered_count, 0)) > 0
+                ORDER BY total_conquered_count DESC, library_conquered_count DESC, total_events_attended DESC, p.name ASC
+                """);
+
+            jdbcTemplate.execute("""
+                CREATE OR REPLACE VIEW v_community_analytics_summary AS
+                SELECT
+                  (SELECT COUNT(*)::int FROM participants) AS total_participants,
+                  (SELECT COUNT(*)::int FROM events) AS total_events,
+                  (SELECT COUNT(*)::int FROM events WHERE LOWER(COALESCE(status, '')) = 'upcoming') AS upcoming_events,
+                  (SELECT COUNT(*)::int FROM events WHERE LOWER(COALESCE(status, '')) = 'completed') AS completed_events,
+                  (SELECT COUNT(*)::int FROM registrations) AS total_registrations,
+                  (SELECT COUNT(*)::int FROM registrations WHERE LOWER(COALESCE(attendance_status, '')) <> 'cancelled') AS active_registrations,
+                  (SELECT COUNT(*)::int FROM registrations WHERE LOWER(COALESCE(attendance_status, '')) = 'checked in') AS checked_in_registrations,
+                  (SELECT COUNT(*)::int FROM registrations WHERE LOWER(COALESCE(attendance_status, '')) = 'cancelled') AS cancelled_registrations,
+                  (SELECT COALESCE(SUM(COALESCE(amount_paid, 0)), 0)::numeric(12,2) FROM registrations WHERE LOWER(COALESCE(attendance_status, '')) <> 'cancelled' AND LOWER(COALESCE(payment_status, '')) IN ('confirmed', 'paid')) AS confirmed_ticket_revenue,
+                  (SELECT COUNT(*)::int FROM games WHERE active = true) AS active_library_games,
+                  (SELECT COUNT(*)::int FROM participant_conquered_games) AS total_conquered_entries,
+                  (SELECT COUNT(*)::int FROM v_top_board_game_conquerors) AS passport_adopters,
+                  (SELECT COUNT(*)::int FROM event_feedback) AS feedback_count,
+                  (SELECT COALESCE(ROUND(AVG(overall_rating)::numeric, 1), 0) FROM event_feedback) AS avg_overall_rating,
+                  (SELECT COUNT(*)::int FROM safety_reports) AS total_safety_reports,
+                  (SELECT COUNT(*)::int FROM safety_reports WHERE LOWER(COALESCE(status, '')) <> 'resolved') AS open_safety_reports,
+                  (SELECT COUNT(*)::int FROM volunteer_applications WHERE LOWER(COALESCE(status, '')) = 'accepted') AS accepted_volunteers,
+                  (SELECT COUNT(*)::int FROM volunteer_applications WHERE LOWER(COALESCE(status, '')) IN ('new', 'under review')) AS pending_volunteers
+                """);
+        } catch (Exception ex) {
+            log.warn("Non-fatal schema maintenance check warning: {}", ex.getMessage());
+        }
     }
 
     private void ensureAdminsSynced() {

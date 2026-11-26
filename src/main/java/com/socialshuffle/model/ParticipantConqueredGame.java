@@ -10,7 +10,8 @@ import java.util.Objects;
     @Index(name = "idx_pcg_library_game", columnList = "library_game_id"),
     @Index(name = "idx_pcg_genre", columnList = "genre"),
     @Index(name = "idx_pcg_source", columnList = "source"),
-    @Index(name = "idx_pcg_norm_name", columnList = "normalized_name")
+    @Index(name = "idx_pcg_norm_name", columnList = "normalized_name"),
+    @Index(name = "idx_pcg_part_lib_norm", columnList = "participant_id, library_game_id, normalized_name")
 })
 public class ParticipantConqueredGame implements Serializable {
 

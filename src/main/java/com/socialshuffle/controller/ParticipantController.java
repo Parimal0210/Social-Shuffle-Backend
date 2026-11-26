@@ -362,10 +362,6 @@ public class ParticipantController {
                         ? updates.getName().trim() : current.getName());
                 merged.setGenre(updates.getGenre() != null && !updates.getGenre().trim().isEmpty()
                         ? updates.getGenre().trim() : current.getGenre());
-                merged.setPlayers(updates.getPlayers() != null && !updates.getPlayers().trim().isEmpty()
-                        ? updates.getPlayers().trim() : current.getPlayers());
-                merged.setDuration(updates.getDuration() != null && !updates.getDuration().trim().isEmpty()
-                        ? updates.getDuration().trim() : current.getDuration());
                 merged.setDatePlayed(updates.getDatePlayed() != null && !updates.getDatePlayed().trim().isEmpty()
                         ? updates.getDatePlayed().trim() : current.getDatePlayed());
                 merged.setNotes(updates.getNotes() != null ? updates.getNotes().trim() : current.getNotes());
@@ -529,16 +525,8 @@ public class ParticipantController {
         String genre = raw.getGenre() != null && !raw.getGenre().trim().isEmpty()
                 ? raw.getGenre().trim()
                 : (matchedLib != null && matchedLib.getCategory() != null ? matchedLib.getCategory() : "Strategy");
-        String players = raw.getPlayers() != null && !raw.getPlayers().trim().isEmpty()
-                ? raw.getPlayers().trim()
-                : (matchedLib != null && matchedLib.getPlayers() != null ? matchedLib.getPlayers() : "2-4 Players");
-        String duration = raw.getDuration() != null && !raw.getDuration().trim().isEmpty()
-                ? raw.getDuration().trim()
-                : (matchedLib != null && matchedLib.getDuration() != null ? matchedLib.getDuration() : "45-60 mins");
 
         entry.setGenre(genre);
-        entry.setPlayers(players);
-        entry.setDuration(duration);
         entry.setDatePlayed(raw.getDatePlayed() != null && !raw.getDatePlayed().trim().isEmpty()
                 ? raw.getDatePlayed().trim()
                 : LocalDate.now().toString());

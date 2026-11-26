@@ -11,8 +11,6 @@ public class ConqueredGameEntry implements Serializable {
     private String id;
     private String name;
     private String genre;
-    private String players;
-    private String duration;
     private String datePlayed;
     private String notes;
     private String libraryGameId;
@@ -44,22 +42,6 @@ public class ConqueredGameEntry implements Serializable {
 
     public void setGenre(String genre) {
         this.genre = genre;
-    }
-
-    public String getPlayers() {
-        return players;
-    }
-
-    public void setPlayers(String players) {
-        this.players = players;
-    }
-
-    public String getDuration() {
-        return duration;
-    }
-
-    public void setDuration(String duration) {
-        this.duration = duration;
     }
 
     public String getDatePlayed() {

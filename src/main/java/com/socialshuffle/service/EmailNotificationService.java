@@ -107,7 +107,7 @@ public class EmailNotificationService {
         }
 
         if (errors.isEmpty()) {
-            String errMsg = "SMTP password (SMTP_PASS) for socialshuffle.pune@gmail.com is not configured yet. Please set SMTP_PASS or add the Gmail App Password / Connect Gmail in Admin -> Mail & OTP Settings.";
+            String errMsg = "SMTP password (SMTP_PASS) for socialshuffle.pune@gmail.com is not configured yet. Please set SMTP_PASS in the server environment or communications configuration.";
             logger.warn("[Mail] {}", errMsg);
             return new EmailDeliveryResult(false, "none", null, errMsg);
         }
@@ -298,7 +298,7 @@ public class EmailNotificationService {
         return buildThemedEmail(
                 "TRANSPORT DIAGNOSTIC",
                 escapeHtml(nonEmpty(subject, "Mail Transport Verified")),
-                "Admin Mail & OTP Settings Verification",
+                "Outbound Mail & OTP Verification Check",
                 "#4AB4A4",
                 "#FF751F",
                 body,
